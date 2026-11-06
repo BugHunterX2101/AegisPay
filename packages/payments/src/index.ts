@@ -14,3 +14,5 @@ export * from './webhooks/verify.ts';
 export * from './webhooks/verify-offline.ts';
 export * from './webhooks/verify-postback.ts';
 export * from './webhooks/simulate.ts';
+export * from './webhooks/process.ts';
+export * from './webhooks/pipeline.ts';

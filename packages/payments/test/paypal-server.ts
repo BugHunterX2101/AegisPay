@@ -43,6 +43,8 @@ interface Cap {
   /** minor units already refunded (COMPLETED and PENDING both reduce what is left) */
   refundedMinor: number;
   refundIds: string[];
+  /** Force the status GET reports (for example DECLINED). Unset, it is computed from the refunds. */
+  status?: string;
 }
 
 /** One part of a multipart/form-data request, with its exact bytes. */
@@ -378,7 +380,7 @@ export async function startPayPalServer(): Promise<PayPalServer> {
       if (m[1] === 'GET') {
         return {
           status: 200,
-          body: { id: c.id, status: left === 0 ? 'REFUNDED' : c.refundedMinor > 0 ? 'PARTIALLY_REFUNDED' : 'COMPLETED', amount: c.amount },
+          body: { id: c.id, status: c.status ?? (left === 0 ? 'REFUNDED' : c.refundedMinor > 0 ? 'PARTIALLY_REFUNDED' : 'COMPLETED'), amount: c.amount },
         };
       }
       // An empty body refunds whatever is left; an amount refunds that much, never more than what is left.

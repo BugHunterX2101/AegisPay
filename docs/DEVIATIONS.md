@@ -27,6 +27,15 @@ The spec names `spentSoFar` (rule R6) and mandate `version` (rule R2) but does n
 - **Crash between a successful evidence POST and the local commit.** The `PAYPAL_CALL` audit row is written in its own transaction, filed under the evidence bundle. On the next `submitEvidence`, `acceptedEvidenceCall` finds it, finishes locally and sends nothing (`EVIDENCE_SUBMIT_RECOVERED`).
 - **Same crash window for a refund** is closed by the deterministic `PayPal-Request-Id` (`sha256(orderRowId:action:attempt)`); PayPal replays the same refund.
 
+### Webhook processing (decisions the spec leaves open)
+
+- **Verify, then process.** `verifyPendingWebhooks` posts each stored event to PayPal's `verify-webhook-signature`; `processPendingWebhooks` only acts on `verified` events. Verification fails closed when no webhook id is configured, and a `FAILURE` verdict closes the event immediately. Transient verify errors retry up to `WEBHOOK_MAX_ATTEMPTS` (3), then the event is closed with a `WEBHOOK_GAVE_UP` audit row. Attempts are counted in `webhook_event.attempts` (migration `0006`).
+- **Kill switch defers, never burns an attempt.** If `PAYPAL_WRITES_ENABLED` is off, an event that needs a PayPal write is left pending (`deferred`) instead of counting toward the give-up limit.
+- **Webhooks never invent state.** Every handler moves an order only along an edge the state machine allows. A capture webhook for an order that is not `DELIVERED` writes `WEBHOOK_STATE_MISMATCH` and moves nothing. An event that matches no order is recorded as unlinked, not guessed at.
+- **`CAPTURE.COMPLETED` settles `DELIVERED -> SETTLED`** and writes the `CAPTURED` audit type with `source: "WEBHOOK"`, so a webhook-observed capture is distinguishable from one we fired. `CAPTURE.DENIED` only fails a `DELIVERED` order.
+- **`CHECKOUT.ORDER.APPROVED` / `AUTHORIZATION.CREATED` are a backstop** for the approve route: they run `authorizeHold` with no approver recorded (`approvedBy` null), since the buyer, not one of our users, approved.
+- **Order lookup by PayPal reference** tries capture id, then authorization id, then PayPal order id (`findOrderIdByPayPalRef`), backed by indexes added in migration `0006`.
+
 ## 3. Unconfirmed against the real sandbox
 
 None of these can be settled without a buyer-approved transaction and a buyer-filed dispute (see section 6).

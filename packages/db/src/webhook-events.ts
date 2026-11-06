@@ -11,11 +11,13 @@ export interface WebhookEventRow {
   verified: WebhookVerification | null;
   processedAt: Date | null;
   error: string | null;
+  attempts: number;
 }
 
 interface WebhookDbRow {
   event_id: string; event_type: string; raw_body: Buffer; headers: Record<string, string>;
   received_at: Date; verified: WebhookVerification | null; processed_at: Date | null; error: string | null;
+  attempts: number;
 }
 
 const toEvent = (r: WebhookDbRow): WebhookEventRow => ({
@@ -27,6 +29,7 @@ const toEvent = (r: WebhookDbRow): WebhookEventRow => ({
   verified: r.verified,
   processedAt: r.processed_at,
   error: r.error,
+  attempts: r.attempts,
 });
 
 /** Headers that can carry credentials. They are never stored: the table is read by the dashboard and evidence. */
@@ -86,6 +89,30 @@ export async function markWebhookProcessed(db: Queryable, eventId: string, error
     [eventId, error ?? null],
   );
   return r.rowCount === 1;
+}
+
+/**
+ * Handling an event failed. Count the attempt and keep the reason. At `maxAttempts` the event is closed
+ * (processed_at set) so a poison event cannot loop forever; its `error` stays for the status page and a human.
+ * Only an unprocessed event changes.
+ */
+export async function recordWebhookFailure(
+  db: Queryable,
+  eventId: string,
+  message: string,
+  maxAttempts = 3,
+): Promise<{ attempts: number; gaveUp: boolean } | null> {
+  const r = await db.query<{ attempts: number; processed_at: Date | null }>(
+    `update webhook_event
+        set attempts = attempts + 1,
+            error = $2,
+            processed_at = case when attempts + 1 >= $3 then now() else null end
+      where event_id = $1 and processed_at is null
+      returning attempts, processed_at`,
+    [eventId, message.slice(0, 2000), maxAttempts],
+  );
+  const row = r.rows[0];
+  return row ? { attempts: row.attempts, gaveUp: row.processed_at !== null } : null;
 }
 
 /**

@@ -154,6 +154,31 @@ export async function recordPayPalOrderId(tx: Queryable, orderId: string, paypal
   return r.rows[0]!.paypal_order_id!;
 }
 
+export interface PayPalRefs {
+  paypalOrderId?: string | null;
+  authorizationId?: string | null;
+  captureId?: string | null;
+}
+
+/**
+ * Which of our orders a PayPal id belongs to. A webhook names PayPal ids only. The refs are tried most specific first
+ * (capture, then authorization, then PayPal order); an authorization matches any id in authorization_history, so the
+ * event for a superseded authorization still finds its order. Null when nothing matches.
+ */
+export async function findOrderIdByPayPalRef(db: Queryable, refs: PayPalRefs): Promise<string | null> {
+  const lookups: Array<[string | null | undefined, string]> = [
+    [refs.captureId, 'select id from purchase_order where capture_id = $1'],
+    [refs.authorizationId, 'select id from purchase_order where $1 = any(authorization_history) or authorization_id = $1'],
+    [refs.paypalOrderId, 'select id from purchase_order where paypal_order_id = $1'],
+  ];
+  for (const [ref, sql] of lookups) {
+    if (!ref) continue;
+    const r = await db.query<{ id: string }>(`${sql} limit 1`, [ref]);
+    if (r.rows[0]) return r.rows[0].id;
+  }
+  return null;
+}
+
 /**
  * Reauthorization replaces the authorization id without changing the order state (HELD stays HELD, IN_TRANSIT stays
  * IN_TRANSIT), so it cannot go through `transition`. Guarded on state and on the id being replaced, so two racing
