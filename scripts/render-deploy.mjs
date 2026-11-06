@@ -64,7 +64,8 @@ const wanted = {
   PAYPAL_CLIENT_ID: process.env.PAYPAL_CLIENT_ID,
   PAYPAL_CLIENT_SECRET: process.env.PAYPAL_CLIENT_SECRET,
   PAYPAL_BASE_URL: process.env.PAYPAL_BASE_URL || 'https://api-m.sandbox.paypal.com',
-  PAYPAL_WRITES_ENABLED: process.env.PAYPAL_WRITES_ENABLED ?? 'true',
+  // The hosted demo is sandbox-only, so writes are on there; the local .env flag is a dev safety default and is not copied.
+  PAYPAL_WRITES_ENABLED: (process.env.PAYPAL_BASE_URL || 'https://api-m.sandbox.paypal.com').includes('sandbox') ? 'true' : 'false',
   ...(process.env.PAYPAL_WEBHOOK_ID ? { PAYPAL_WEBHOOK_ID: process.env.PAYPAL_WEBHOOK_ID } : {}),
   GROQ_API_KEY: process.env.GROQ_API_KEY,
   CHANNEL3_API_KEY: process.env.CHANNEL3_API_KEY,
