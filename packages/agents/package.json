@@ -10,6 +10,7 @@
     "@aegis/core": "workspace:*",
     "@aegis/db": "workspace:*",
     "@ai-sdk/anthropic": "4.0.97",
+    "@ai-sdk/groq": "4.0.77",
     "@paypal/agent-toolkit": "1.11.0",
     "ai": "7.0.163",
     "tslib": "^2.9.1",

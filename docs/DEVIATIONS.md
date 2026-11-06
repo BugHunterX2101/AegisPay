@@ -88,10 +88,19 @@ None of these can be settled without a buyer-approved transaction and a buyer-fi
 - **Judge-Mode clock.** The offset is held in one process today. Before the demo-clock route ships it must be persisted in the database so the worker sees the same clock.
 - **Audit tamper test** switches off the append-only trigger inside a transaction to forge a row, then restores it; the table refuses `UPDATE` for every normal path.
 
+## 5c. Agent decisions that differ from, or go beyond, the TDD
+
+- **The agents package has no database access at all** (the TDD allowed read). Supplier lead time and facts are passed in by the caller, and the gate-and-persist step for proposals lives in the API. "Agents cannot write" is therefore true by construction as well as by lint.
+- **Ranking is code, the model only phrases.** The TDD has the model rank the shortlist. Here the order is stock, then price, then rating, then id, always the same for the same input. The model writes one-line reasons, accepted only if every figure in them is in the facts; otherwise the template reason is used.
+- **Grounding is mechanical.** Defense notes and shortlist reasons are checked by code: every number must appear in the fact list and every `[Fn]` citation must name a real fact. A failed check falls back to a template built from the facts (author `system:evidence-template`), never to an unchecked model answer. The mandate parser returns non-blocking warnings for any figure the owner never wrote.
+- **The LLM provider is Groq (`openai/gpt-oss-120b`) when only `GROQ_API_KEY` is set**, Anthropic when `ANTHROPIC_API_KEY` is set (`AEGIS_LLM_MODEL` overrides either). The live tests (`pnpm test:sandbox`) found that strict JSON-schema mode needs every property present, so "not stated" is an empty list or `null`, converted to an absent field by code.
+- **PayPal Agent Toolkit read tools are not wired in.** The agents already receive the same facts from our database, and `fetchDispute` covers the one read the worker needs. Compatibility question O1 is therefore not exercised; revisit only if time allows.
+- **Channel3 has no shipping or tax fields.** Proposals will record shipping and tax as 0 and say so in the rationale. Lead time comes from the seeded `supplier_profile` table and is labelled simulated.
+
 ## 6. What is needed from the owner
 
 1. A sandbox **buyer** login (or approve one order manually) so capture, refund and dispute flows can run against the real sandbox.
 2. A **buyer-filed sandbox dispute** on that transaction, to settle the evidence items in section 3.
 3. A **public HTTPS URL** for the webhook listener (a Render deploy) to verify signatures and delivery ids.
-4. The Channel3 and LLM API keys.
-5. **Rotate or revoke** the GitHub token and the PayPal sandbox secret that were pasted in chat, after the hackathon.
+4. The **Channel3 API key**. (An LLM key has been provided and works; see 5c.) Without a Channel3 key, sourcing reports that the catalog is unavailable rather than inventing products.
+5. **Rotate or revoke** the GitHub token, the PayPal sandbox secret and the Groq key that were pasted in chat, after the hackathon.
