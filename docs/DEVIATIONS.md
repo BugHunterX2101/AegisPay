@@ -36,6 +36,14 @@ The spec names `spentSoFar` (rule R6) and mandate `version` (rule R2) but does n
 - **`CHECKOUT.ORDER.APPROVED` / `AUTHORIZATION.CREATED` are a backstop** for the approve route: they run `authorizeHold` with no approver recorded (`approvedBy` null), since the buyer, not one of our users, approved.
 - **Order lookup by PayPal reference** tries capture id, then authorization id, then PayPal order id (`findOrderIdByPayPalRef`), backed by indexes added in migration `0006`.
 
+### Worker (decisions the spec leaves open)
+
+- **SLA breach flags, it does not void.** `sla.watch` writes one `SLA_BREACH_FLAGGED` audit row per order (guarded by a per-order advisory lock, so overlapping runs cannot double-flag). Voiding releases money, and FR-07 has a human confirm it, so the void is a separate `payment.void` job the API enqueues with `confirmedBy`.
+- **Failure classes.** A job failure is `deferred` (kill switch off: the job re-queues itself after `deferSeconds` and burns no retry), `permanent` (wrong state, proof gate, unknown carrier, malformed payload: the job completes, the audit log holds the reason) or `retry` (pg-boss retries with backoff). The payment queues use pg-boss's `stately` policy so a deferred job can re-queue while it is still the active one.
+- **`poll.open` covers** AWAITING_APPROVAL (buyer approved but our `onApprove` was lost: authorize, but only after PayPal's own GET says `APPROVED`, and not within 2 minutes of the last change), HELD / IN_TRANSIT (PayPal voided it: record it; expired or captured outside our flow: alert once, move nothing) and open disputes. DELIVERED is not polled: `capture` settles the order itself, and a capture made behind our back raises `WEBHOOK_STATE_MISMATCH` through the webhook.
+- **Tracking push** is its own queue (`tracking.push`), queued after a capture and by the webhook processor. It checks the capture id still belongs to the order, and stamps `fulfillment.pushed_to_paypal_at` in the same transaction as a `TRACKING_PUSHED` audit row.
+- **`dispute.sync` / `dispute.submit` queues are deferred.** The webhook processor syncs inline and `poll.open` re-fetches; submitting evidence needs a human click and arrives with the API route.
+
 ## 3. Unconfirmed against the real sandbox
 
 None of these can be settled without a buyer-approved transaction and a buyer-filed dispute (see section 6).
@@ -48,6 +56,7 @@ None of these can be settled without a buyer-approved transaction and a buyer-fi
 | Shape of `refund_ids` on a dispute | Parsed defensively | Refund linkage on a dispute is not shown |
 | Whether the id `simulate-event` returns is the id later delivered | Not relied upon | Only matters for delivery-id de-duplication tests |
 | Refund 422 issue names | Only `INVALID_RESOURCE_ID` (404) is confirmed | A 422 would surface as a generic PayPal error |
+| What PayPal answers to a second tracking POST for the same capture | The worker checks `pushed_to_paypal_at` first, so a repeat is only possible after a crash between PayPal's reply and our stamp | The retry gets a 4xx and the job fails visibly; tracking is already at PayPal |
 | `tax_total` without item-level tax | **Confirmed**: accepted (HTTP 200, `PAYER_ACTION_REQUIRED`) | n/a |
 
 ## 4. Real-sandbox findings (verified)

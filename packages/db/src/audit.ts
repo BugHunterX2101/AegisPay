@@ -113,6 +113,12 @@ export async function appendAudit(tx: Tx, e: NewAuditEvent): Promise<{ seq: bigi
   return { seq, hash };
 }
 
+/** Whether an audit row of `type` already exists for the entity. Lets a periodic job record an observation once. */
+export async function hasAuditEvent(db: Pick<Db, 'query'>, type: string, entityId: string): Promise<boolean> {
+  const r = await db.query('select 1 from audit_event where type = $1 and entity_id = $2 limit 1', [type, entityId]);
+  return r.rows.length > 0;
+}
+
 export type ChainResult =
   | { ok: true; head: string; count: bigint }
   | { ok: false; firstBadSeq: bigint; reason: 'SEQ_GAP' | 'PREV_HASH_MISMATCH' | 'HASH_MISMATCH' };

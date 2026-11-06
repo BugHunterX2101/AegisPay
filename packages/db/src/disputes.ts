@@ -68,6 +68,22 @@ export async function getDispute(db: Queryable, id: string): Promise<DisputeRow 
   return r.rows[0] ? toDispute(r.rows[0]) : null;
 }
 
+/**
+ * Disputes still in play: the order is DISPUTED (we owe an answer) or EVIDENCE_SUBMITTED (PayPal owes a verdict).
+ * The worker re-fetches these so a lost webhook only delays an update.
+ */
+export async function listOpenDisputeIds(db: Queryable, limit = 100): Promise<string[]> {
+  const r = await db.query<{ paypal_dispute_id: string }>(
+    `select d.paypal_dispute_id
+       from dispute d join purchase_order o on o.id = d.order_id
+      where o.state in ('DISPUTED', 'EVIDENCE_SUBMITTED')
+      order by d.updated_at nulls first, d.paypal_dispute_id
+      limit $1`,
+    [limit],
+  );
+  return r.rows.map((x) => x.paypal_dispute_id);
+}
+
 /** The order whose PayPal capture is the disputed transaction (`disputed_transactions[].seller_transaction_id`). */
 export async function findOrderIdByCaptureId(db: Queryable, captureId: string): Promise<string | null> {
   const r = await db.query<{ id: string }>('select id from purchase_order where capture_id = $1', [captureId]);

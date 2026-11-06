@@ -179,6 +179,33 @@ export async function findOrderIdByPayPalRef(db: Queryable, refs: PayPalRefs): P
   return null;
 }
 
+/** Orders in any of `states`, oldest-updated first. The worker's pollers walk these; `limit` bounds one pass. */
+export async function listOrdersInStates(db: Queryable, states: readonly OrderState[], limit = 200): Promise<OrderRow[]> {
+  const r = await db.query<OrderDbRow>(
+    'select * from purchase_order where state = any($1::text[]) order by updated_at, id limit $2',
+    [states, limit],
+  );
+  return r.rows.map(toOrder);
+}
+
+/**
+ * HELD / IN_TRANSIT orders whose mandate delivery deadline (`deliver_by`, a calendar date) is before `today`
+ * ('YYYY-MM-DD', from the app clock so the Judge Mode demo clock can move it). These are the SLA breaches.
+ */
+export async function listSlaBreaches(db: Queryable, today: string, limit = 200): Promise<Array<{ order: OrderRow; deliverBy: string }>> {
+  const r = await db.query<OrderDbRow & { m_deliver_by: string }>(
+    `select o.*, m.deliver_by::text as m_deliver_by
+       from purchase_order o
+       join proposal p on p.id = o.proposal_id
+       join mandate m on m.id = p.mandate_id and m.version = p.mandate_version
+      where o.state in ('HELD', 'IN_TRANSIT') and m.deliver_by < $1::date
+      order by m.deliver_by, o.id
+      limit $2`,
+    [today, limit],
+  );
+  return r.rows.map((x) => ({ order: toOrder(x), deliverBy: x.m_deliver_by }));
+}
+
 /**
  * Reauthorization replaces the authorization id without changing the order state (HELD stays HELD, IN_TRANSIT stays
  * IN_TRANSIT), so it cannot go through `transition`. Guarded on state and on the id being replaced, so two racing
