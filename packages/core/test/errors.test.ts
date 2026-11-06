@@ -5,7 +5,7 @@ import type { ErrorCode } from '../src/index.ts';
 describe('HTTP_STATUS', () => {
   it('maps every error code to a 4xx/5xx status', () => {
     const entries = Object.entries(HTTP_STATUS);
-    expect(entries).toHaveLength(20);
+    expect(entries).toHaveLength(21);
     for (const [, status] of entries) {
       expect(Number.isInteger(status)).toBe(true);
       expect(status).toBeGreaterThanOrEqual(400);
@@ -14,6 +14,7 @@ describe('HTTP_STATUS', () => {
   });
   it('uses the documented statuses for the money-safety codes', () => {
     expect(HTTP_STATUS.WRITES_DISABLED).toBe(503);
+    expect(HTTP_STATUS.AGENT_UNAVAILABLE).toBe(503); // no model or catalog key: say so, never invent a result
     expect(HTTP_STATUS.PAYPAL_ERROR).toBe(502);
     expect(HTTP_STATUS.VALIDATION).toBe(400);
     expect(HTTP_STATUS.NOT_FOUND).toBe(404);

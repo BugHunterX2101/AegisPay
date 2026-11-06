@@ -38,6 +38,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@aegis/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       '@aegis/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -77,6 +80,10 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+    devDependencies:
+      ai:
+        specifier: 7.0.163
+        version: 7.0.163(zod@4.6.7)
 
   apps/web:
     dependencies:

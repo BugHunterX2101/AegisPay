@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ApiDeps } from './deps.ts';
 import { installErrorHandling } from './errors.ts';
 import { toJson } from './json.ts';
+import { registerAgentRoutes } from './routes/agents.ts';
 import { registerAuditRoutes } from './routes/audit.ts';
 import { registerMandateRoutes } from './routes/mandates.ts';
 import { registerOrderRoutes } from './routes/orders.ts';
@@ -58,6 +59,7 @@ export async function buildApp(o: BuildAppOptions): Promise<FastifyInstance> {
 
   registerWebhooks(app, o.deps);
   registerMandateRoutes(app, o.deps);
+  registerAgentRoutes(app, o.deps);
   registerOrderRoutes(app, o.deps);
   registerAuditRoutes(app, o.deps);
 

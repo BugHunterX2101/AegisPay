@@ -1,8 +1,8 @@
 {
   "apps/api/package.json": {
-    "mtime": 1793950156.6317153,
-    "seen": 1793951553.0524096,
-    "ast_hash": "c5cf6e3bf9f7d8f1c47b3a654e7753e5",
+    "mtime": 1793952954.1722078,
+    "seen": 1793953198.882614,
+    "ast_hash": "0c8c24fb8fd10652f9304d74d37f0f6c",
     "semantic_hash": ""
   },
   "apps/web/package.json": {
@@ -594,9 +594,9 @@
     "semantic_hash": ""
   },
   "docs/DEVIATIONS.md": {
-    "mtime": 1793952486.4202647,
-    "seen": 1793952506.746149,
-    "ast_hash": "bcc05d8e0da8ce46de700263cf3cdf9f",
+    "mtime": 1793953177.5215585,
+    "seen": 1793953198.8829553,
+    "ast_hash": "74cc0a2a995862c31915ac3d2eb53c7b",
     "semantic_hash": ""
   },
   "packages/db/src/catalog.ts": {
@@ -696,15 +696,15 @@
     "semantic_hash": ""
   },
   "apps/api/src/app.ts": {
-    "mtime": 1793951072.936227,
-    "seen": 1793951553.0524173,
-    "ast_hash": "dd801d992d75f2f4432321bbdb05dba0",
+    "mtime": 1793952902.7262754,
+    "seen": 1793953198.8826292,
+    "ast_hash": "8c633aa8168624548f0f8fba833074cd",
     "semantic_hash": ""
   },
   "apps/api/src/deps.ts": {
-    "mtime": 1793950721.8401866,
-    "seen": 1793951553.0524201,
-    "ast_hash": "1ff6ba4f50821032e6e4e448d002f49e",
+    "mtime": 1793952840.5654113,
+    "seen": 1793953198.8826334,
+    "ast_hash": "b9195ccf9d45c780390d51d446be87d6",
     "semantic_hash": ""
   },
   "apps/api/src/errors.ts": {
@@ -714,9 +714,9 @@
     "semantic_hash": ""
   },
   "apps/api/src/index.ts": {
-    "mtime": 1793951396.5082004,
-    "seen": 1793951553.0524237,
-    "ast_hash": "16b158276040729326c98697aff79cd5",
+    "mtime": 1793952905.8001075,
+    "seen": 1793953198.8826406,
+    "ast_hash": "a0faa3932c5ab76e7a8806c355ac0f0f",
     "semantic_hash": ""
   },
   "apps/api/src/json.ts": {
@@ -875,10 +875,28 @@
     "ast_hash": "f373b28c985c35cc4a03318f142f2d9a",
     "semantic_hash": ""
   },
+  "apps/api/src/routes/agents.ts": {
+    "mtime": 1793952893.676208,
+    "seen": 1793953198.882646,
+    "ast_hash": "da9759a4e19e2283cd322bbb2ba8dfe3",
+    "semantic_hash": ""
+  },
+  "apps/api/test/agents.test.ts": {
+    "mtime": 1793953118.0152416,
+    "seen": 1793953198.8826594,
+    "ast_hash": "4d165f556285d22d1bc0dbffcce78768",
+    "semantic_hash": ""
+  },
+  "packages/agents/test/channel3.sandbox.test.ts": {
+    "mtime": 1793952574.3947017,
+    "seen": 1793953198.8826985,
+    "ast_hash": "45a2eb95c065e091ccd15ba172e7b3f6",
+    "semantic_hash": ""
+  },
   "pnpm-lock.yaml": {
-    "mtime": 1793952154.2257023,
-    "seen": 1793952506.7461581,
-    "ast_hash": "3f2f1b1af6092bf54ea0f90b8ea704cd",
+    "mtime": 1793952964.5939872,
+    "seen": 1793953198.8829818,
+    "ast_hash": "f022fd959420ab011f507330b312335a",
     "semantic_hash": ""
   }
 }

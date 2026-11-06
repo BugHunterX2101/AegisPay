@@ -1,3 +1,4 @@
+import { channel3FromEnv, modelFromEnv } from '@aegis/agents';
 import { systemClock } from '@aegis/core';
 import { closePool, createPool, migrate } from '@aegis/db';
 import { createJobSender, ensureQueues } from '@aegis/jobs';
@@ -30,7 +31,8 @@ async function main(): Promise<void> {
   await ensureQueues(boss);
 
   const app = await buildApp({
-    deps: { db, ctx, clock: systemClock, jobs: createJobSender(boss), appUrl },
+    // Both are null without their key: the agent routes then answer 503 AGENT_UNAVAILABLE instead of inventing results.
+    deps: { db, ctx, clock: systemClock, jobs: createJobSender(boss), appUrl, model: modelFromEnv(), channel3: channel3FromEnv() },
     sessionSecret,
     secureCookies: appUrl.startsWith('https://'),
     judgeMode: process.env.JUDGE_MODE !== 'false',

@@ -1,3 +1,4 @@
+import type { Channel3Config, LanguageModel } from '@aegis/agents';
 import type { Clock } from '@aegis/core';
 import type { Db } from '@aegis/db';
 import type { JobSender } from '@aegis/jobs';
@@ -12,6 +13,10 @@ export interface ApiDeps {
   jobs: JobSender;
   /** Public base URL of this app: PayPal's return and cancel URLs are built from it. */
   appUrl: string;
+  /** The hosted language model, or null when no key is configured (the parser then answers AGENT_UNAVAILABLE). */
+  model?: LanguageModel | null;
+  /** The live catalog (Channel3), or null when no key is configured (sourcing then answers AGENT_UNAVAILABLE). */
+  channel3?: Channel3Config | null;
 }
 
 export type Log = (level: 'info' | 'warn' | 'error', event: string, fields?: Record<string, unknown>) => void;
