@@ -123,9 +123,16 @@ export async function insertEvidenceBundle(
   return toBundle(r.rows[0]!);
 }
 
-export async function getEvidenceBundle(db: Queryable, id: string): Promise<EvidenceBundleRow | null> {
-  const r = await db.query<BundleDbRow>('select * from evidence_bundle where id = $1', [id]);
+/** `forUpdate` (inside a transaction) serialises concurrent submitters of the same bundle on its row lock. */
+export async function getEvidenceBundle(db: Queryable, id: string, opts: { forUpdate?: boolean } = {}): Promise<EvidenceBundleRow | null> {
+  const r = await db.query<BundleDbRow>(`select * from evidence_bundle where id = $1 ${opts.forUpdate ? 'for update' : ''}`, [id]);
   return r.rows[0] ? toBundle(r.rows[0]) : null;
+}
+
+/** True once any bundle for this dispute has been sent to PayPal. This is what moves an order to EVIDENCE_SUBMITTED. */
+export async function hasSubmittedBundle(db: Queryable, disputeId: string): Promise<boolean> {
+  const r = await db.query('select 1 from evidence_bundle where dispute_id = $1 and submitted_at is not null limit 1', [disputeId]);
+  return r.rows.length > 0;
 }
 
 /** Newest bundle first. There is no created_at; ids are UUIDv7, so id order is creation order. */

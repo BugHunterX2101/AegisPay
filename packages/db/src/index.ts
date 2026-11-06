@@ -7,3 +7,4 @@ export * from './proposals.ts';
 export * from './fulfillment.ts';
 export * from './refunds.ts';
 export * from './disputes.ts';
+export * from './dispute-sources.ts';

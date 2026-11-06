@@ -186,7 +186,11 @@ describe('idempotency and PayPal as the backstop', () => {
       refundCapture(h.ctx, s.orderId, { amountMinor: 10000n, reason: 'a', confirmedBy: OWNER }),
       refundCapture(h.ctx, s.orderId, { amountMinor: 10000n, reason: 'b', confirmedBy: OWNER }),
     ]);
-    expect(results.filter((r) => r.status === 'fulfilled').length).toBeLessThanOrEqual(1);
+    // Both callers may compute the same idempotency attempt and get the SAME refund replayed; what must never
+    // happen is two distinct refunds. Which interleaving occurs depends on timing, and both are safe.
+    const ids = new Set(results.flatMap((r) => (r.status === 'fulfilled' ? [r.value.refundId] : [])));
+    expect(ids.size).toBeLessThanOrEqual(1);
+    expect((await listRefunds(h.t.db, s.orderId)).length).toBeLessThanOrEqual(1);
     expect(h.pp.captures.get(s.captureId)!.refundedMinor).toBeLessThanOrEqual(14040);
     expect(await refundedMinor(h.t.db, s.orderId)).toBeLessThanOrEqual(14040n);
   });

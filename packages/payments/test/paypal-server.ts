@@ -45,8 +45,39 @@ interface Cap {
   refundIds: string[];
 }
 
+/** One part of a multipart/form-data request, with its exact bytes. */
+export interface MultipartPart {
+  name: string;
+  filename: string | undefined;
+  contentType: string | undefined;
+  bytes: Buffer;
+}
+
+export interface Disp {
+  id: string;
+  reason: string;
+  status: string;
+  stage: string;
+  dueDate: string | undefined;
+  transactionIds: string[];
+  outcomeCode: string | undefined;
+  /** what provide-evidence delivered, byte for byte */
+  received: { input: unknown; files: MultipartPart[] }[];
+}
+
 export interface PayPalServer {
   baseUrl: string;
+  disputes: Map<string, Disp>;
+  /** The rel PayPal's dispute links use for "provide evidence". Docs say `provide-evidence`; payloads may use an underscore. */
+  provideEvidenceRel: string;
+  /** Keep offering the provide-evidence link whatever the status is (isolates the status check from the link check). */
+  alwaysOfferProvideEvidence: boolean;
+  /** Accept a provide-evidence POST whatever the dispute status is, so only our own locking can stop a duplicate. */
+  acceptDuplicateEvidence: boolean;
+  /** Create a dispute against a capture we made. Defaults to the seller's turn to respond. */
+  addDispute(o: { id?: string; captureId: string; reason?: string; status?: string; dueInMs?: number | null }): Disp;
+  /** PayPal deciding the dispute. */
+  resolveDispute(id: string, outcomeCode: string): void;
   seen: SeenCall[];
   orders: Map<string, Ord>;
   auths: Map<string, Auth>;
@@ -69,6 +100,36 @@ export interface PayPalServer {
 
 const D = (s: string) => Math.round(Number(s) * 100);
 
+/** Splits a multipart/form-data body into parts, keeping each part's exact bytes (PDFs are binary). */
+function parseMultipart(contentType: string, buf: Buffer): MultipartPart[] | null {
+  const m = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType);
+  if (!m) return null;
+  const boundary = Buffer.from(`--${m[1] ?? m[2]}`);
+  const parts: MultipartPart[] = [];
+  let pos = buf.indexOf(boundary);
+  if (pos < 0) return null;
+  for (;;) {
+    const after = pos + boundary.length;
+    if (buf.subarray(after, after + 2).toString('latin1') === '--') return parts;
+    const start = after + 2; // CRLF after the boundary line
+    const next = buf.indexOf(boundary, start);
+    if (next < 0) return null;
+    const part = buf.subarray(start, next - 2); // CRLF before the next boundary belongs to the framing
+    const split = part.indexOf('\r\n\r\n');
+    if (split < 0) return null;
+    const head = part.subarray(0, split).toString('utf8');
+    parts.push({
+      name: /name="([^"]*)"/.exec(head)?.[1] ?? '',
+      filename: /filename="([^"]*)"/.exec(head)?.[1],
+      contentType: /content-type:\s*([^\r\n]+)/i.exec(head)?.[1]?.trim(),
+      bytes: part.subarray(split + 4),
+    });
+    pos = next;
+  }
+}
+
+const ALLOWED_EVIDENCE_EXT = ['.jpg', '.jpeg', '.gif', '.png', '.pdf'];
+
 /**
  * A real HTTP server speaking PayPal's Orders v2 / Payments v2 REST contract, with the validation rules PayPal
  * documents: breakdown must add up, item tax must agree with tax_total, invoice_id is unique, an order must be
@@ -83,6 +144,7 @@ export async function startPayPalServer(): Promise<PayPalServer> {
   const orders = new Map<string, Ord>();
   const auths = new Map<string, Auth>();
   const captures = new Map<string, Cap>();
+  const disputes = new Map<string, Disp>();
   const invoices = new Set<string>();
   const idem = new Map<string, { status: number; body: unknown }>();
   const failures: Failure[] = [];
@@ -99,6 +161,32 @@ export async function startPayPalServer(): Promise<PayPalServer> {
     refundStatus: 'COMPLETED',
     delayMs: 0,
     simulated: [],
+    disputes,
+    provideEvidenceRel: 'provide-evidence',
+    alwaysOfferProvideEvidence: false,
+    acceptDuplicateEvidence: false,
+    addDispute: (o) => {
+      const cap = captures.get(o.captureId);
+      if (!cap) throw new Error(`no such capture ${o.captureId}`);
+      const d: Disp = {
+        id: o.id ?? `PP-D-${++seq}`,
+        reason: o.reason ?? 'MERCHANDISE_OR_SERVICE_NOT_RECEIVED',
+        status: o.status ?? 'WAITING_FOR_SELLER_RESPONSE',
+        stage: 'CHARGEBACK',
+        dueDate: o.dueInMs === null ? undefined : new Date(Date.now() + (o.dueInMs ?? 10 * 86_400_000)).toISOString(),
+        transactionIds: [o.captureId],
+        outcomeCode: undefined,
+        received: [],
+      };
+      disputes.set(d.id, d);
+      return d;
+    },
+    resolveDispute: (id, outcomeCode) => {
+      const d = disputes.get(id);
+      if (!d) throw new Error(`no such dispute ${id}`);
+      d.status = 'RESOLVED';
+      d.outcomeCode = outcomeCode;
+    },
     approve: (id) => {
       const o = orders.get(id);
       if (!o) throw new Error(`no such order ${id}`);
@@ -116,7 +204,23 @@ export async function startPayPalServer(): Promise<PayPalServer> {
 
   const authView = (a: Auth) => ({ id: a.id, status: a.status, amount: a.amount, create_time: a.create_time, expiration_time: a.expiration_time });
 
-  function handle(method: string, path: string, headers: IncomingHttpHeaders, body: any, rawText = ''): { status: number; body: unknown } {
+  const disputeView = (d: Disp) => ({
+    dispute_id: d.id,
+    reason: d.reason,
+    status: d.status,
+    dispute_life_cycle_stage: d.stage,
+    ...(d.dueDate ? { seller_response_due_date: d.dueDate } : {}),
+    disputed_transactions: d.transactionIds.map((t) => ({ seller_transaction_id: t })),
+    ...(d.outcomeCode ? { dispute_outcome: { outcome_code: d.outcomeCode } } : {}),
+    links: [
+      { href: `${self.baseUrl}/v1/customer/disputes/${d.id}`, rel: 'self', method: 'GET' },
+      ...(d.status === 'WAITING_FOR_SELLER_RESPONSE' || self.alwaysOfferProvideEvidence
+        ? [{ href: `${self.baseUrl}/v1/customer/disputes/${d.id}/provide-evidence`, rel: self.provideEvidenceRel, method: 'POST' }]
+        : []),
+    ],
+  });
+
+  function handle(method: string, path: string, headers: IncomingHttpHeaders, body: any, rawText = '', rawBuf: Buffer = Buffer.alloc(0)): { status: number; body: unknown } {
     if (!/^Bearer tok-/.test(String(headers.authorization ?? ''))) return err(401, 'AUTHENTICATION_FAILURE', 'Authentication failed due to invalid authentication credentials');
     const key = `${method} ${path}`;
     const f = failures.find((x) => x.count > 0 && x.match.test(key));
@@ -283,6 +387,41 @@ export async function startPayPalServer(): Promise<PayPalServer> {
       c.refundIds.push(refId);
       return done({ status: 201, body: { id: refId, status: self.refundStatus, amount: amt, note_to_payer: body?.note_to_payer, create_time: now.toISOString() } });
     }
+    m = /^(GET|POST) \/v1\/customer\/disputes\/([^/]+)(?:\/(provide-evidence))?$/.exec(key);
+    if (m) {
+      const d = disputes.get(m[2]!);
+      if (!d) return err(404, 'RESOURCE_NOT_FOUND', 'The specified resource does not exist.', [{ issue: 'INVALID_RESOURCE_ID' }]);
+      if (m[1] === 'GET') return { status: 200, body: disputeView(d) };
+      if (m[3] !== 'provide-evidence') return err(404, 'RESOURCE_NOT_FOUND', `No route for ${key}`);
+
+      // The documented rules for provide-evidence. The issue names below are modelled, not copied from PayPal.
+      if (d.status !== 'WAITING_FOR_SELLER_RESPONSE' && !self.acceptDuplicateEvidence) return unprocessable('DISPUTE_NOT_AWAITING_SELLER');
+      const parts = parseMultipart(String(headers['content-type'] ?? ''), rawBuf);
+      if (!parts) return err(400, 'INVALID_REQUEST', 'Request is not well-formed, syntactically incorrect, or violates schema.');
+      const inputPart = parts.find((p) => p.name === 'input');
+      if (!inputPart || !/^application\/json/i.test(inputPart.contentType ?? '')) return err(400, 'INVALID_REQUEST', 'Request is not well-formed, syntactically incorrect, or violates schema.', [{ issue: 'MISSING_INPUT_PART' }]);
+      let input: any;
+      try {
+        input = JSON.parse(inputPart.bytes.toString('utf8'));
+      } catch {
+        return err(400, 'INVALID_REQUEST', 'Request is not well-formed, syntactically incorrect, or violates schema.', [{ issue: 'MALFORMED_INPUT_JSON' }]);
+      }
+      const evs: any[] = Array.isArray(input?.evidences) ? input.evidences : [];
+      if (evs.length === 0) return unprocessable('EVIDENCES_REQUIRED');
+      for (const e of evs) {
+        if (typeof e?.evidence_type !== 'string' || !/^[A-Z_]+$/.test(e.evidence_type)) return unprocessable('INVALID_EVIDENCE_TYPE');
+        if (typeof e.notes === 'string' && e.notes.length > 2000) return unprocessable('NOTES_TOO_LONG');
+      }
+      const files = parts.filter((p) => p.name !== 'input');
+      if (files.length > 3) return unprocessable('TOO_MANY_FILES');
+      for (const f of files) {
+        if (!ALLOWED_EVIDENCE_EXT.some((x) => (f.filename ?? '').toLowerCase().endsWith(x))) return unprocessable('UNSUPPORTED_FILE_TYPE');
+        if (f.bytes.byteLength >= 10 * 1024 * 1024) return unprocessable('FILE_TOO_LARGE');
+      }
+      d.received.push({ input, files });
+      d.status = 'UNDER_REVIEW';
+      return { status: 200, body: { links: [{ href: `${self.baseUrl}/v1/customer/disputes/${d.id}`, rel: 'self', method: 'GET' }] } };
+    }
     return err(404, 'RESOURCE_NOT_FOUND', `No route for ${key}`);
   }
 
@@ -290,17 +429,19 @@ export async function startPayPalServer(): Promise<PayPalServer> {
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
     req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
+      const rawBuf = Buffer.concat(chunks);
+      const raw = rawBuf.toString('utf8');
+      const isJson = !/^multipart\//i.test(String(req.headers['content-type'] ?? ''));
       let parsed: any;
       try {
-        parsed = raw ? JSON.parse(raw) : undefined;
+        parsed = raw && isJson ? JSON.parse(raw) : undefined;
       } catch {
         parsed = undefined;
       }
       const path = (req.url ?? '').split('?')[0]!;
       seen.push({ method: req.method ?? '', path, headers: req.headers, body: parsed });
       setTimeout(() => {
-        const r = handle(req.method ?? '', path, req.headers, parsed, raw);
+        const r = handle(req.method ?? '', path, req.headers, parsed, raw, rawBuf);
         res.writeHead(r.status, { 'content-type': 'application/json', 'paypal-debug-id': `dbg-${seen.length}` });
         res.end(r.body === undefined ? undefined : JSON.stringify(r.body));
       }, self.delayMs);

@@ -5,6 +5,9 @@ export default defineConfig({
     include: ['packages/*/test/**/*.test.ts', 'apps/*/test/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/*.sandbox.test.ts', '**/e2e/**'],
     testTimeout: 30_000,
+    // Every file shares one Postgres. Each gets its own schema, but LISTEN/NOTIFY is per-database, so files running
+    // at the same time hear each other's audit notifications. Run files one at a time; tests inside a file still can.
+    fileParallelism: false,
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**/*.ts'],

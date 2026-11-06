@@ -119,12 +119,6 @@
     "ast_hash": "4e6e84eacf4d8a2b7caac76576cb2291",
     "semantic_hash": "4e6e84eacf4d8a2b7caac76576cb2291"
   },
-  ".claude/settings.json": {
-    "mtime": 1793889794.6406727,
-    "seen": 1793889957.7698314,
-    "ast_hash": "4e6b348f766cbe9ba72e1dbdcb9d4135",
-    "semantic_hash": ""
-  },
   "packages/core/src/clock.ts": {
     "mtime": 1793887757.2809944,
     "seen": 1793889957.7698555,
@@ -222,9 +216,9 @@
     "semantic_hash": ""
   },
   "vitest.config.ts": {
-    "mtime": 1793887917.4748,
-    "seen": 1793889957.7698915,
-    "ast_hash": "ef09e178bdbec40b704650c1faf93468",
+    "mtime": 1793932856.1761997,
+    "seen": 1793933087.4641678,
+    "ast_hash": "bba56dd9e4585338f1df80575988b615",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -246,9 +240,9 @@
     "semantic_hash": ""
   },
   "packages/db/src/index.ts": {
-    "mtime": 1793903075.3540344,
-    "seen": 1793903303.8354244,
-    "ast_hash": "6e178000e8682f1dc2be1d8c4c720619",
+    "mtime": 1793931076.5282445,
+    "seen": 1793933087.4557238,
+    "ast_hash": "aa3c5bbebe1e22f091c0d8696fbfe214",
     "semantic_hash": ""
   },
   "packages/db/src/migrate-cli.ts": {
@@ -420,9 +414,9 @@
     "semantic_hash": ""
   },
   "packages/payments/test/paypal-server.ts": {
-    "mtime": 1793903383.208621,
-    "seen": 1793929660.5130992,
-    "ast_hash": "fbeb8178c461cc2bbc4f22adcf56e99e",
+    "mtime": 1793932552.9943488,
+    "seen": 1793933087.462263,
+    "ast_hash": "8fd530854bf67cc91ca623d40160bfa7",
     "semantic_hash": ""
   },
   "packages/payments/src/rest.ts": {
@@ -468,9 +462,9 @@
     "semantic_hash": ""
   },
   "packages/db/src/disputes.ts": {
-    "mtime": 1793903238.6976368,
-    "seen": 1793903303.8350573,
-    "ast_hash": "184a8d8db85714eaa346f6c6fb9f7dca",
+    "mtime": 1793931048.5403981,
+    "seen": 1793933087.4554496,
+    "ast_hash": "9bf6d5a6c5fde4b514fd6ee99f1fb206",
     "semantic_hash": ""
   },
   "packages/db/src/refunds.ts": {
@@ -486,9 +480,9 @@
     "semantic_hash": ""
   },
   "packages/payments/src/index.ts": {
-    "mtime": 1793929603.9356067,
-    "seen": 1793929660.5108762,
-    "ast_hash": "01d54ce22754ac9eea455b281fab9cb3",
+    "mtime": 1793931232.8497841,
+    "seen": 1793933087.4594314,
+    "ast_hash": "b7024baab10d0ce5052513240e440cb0",
     "semantic_hash": ""
   },
   "packages/payments/src/refunds.ts": {
@@ -498,9 +492,51 @@
     "semantic_hash": ""
   },
   "packages/payments/test/refunds.test.ts": {
-    "mtime": 1793929485.0651023,
-    "seen": 1793929660.5131018,
-    "ast_hash": "b68911d9877c8a16eec37d5f72dd05b2",
+    "mtime": 1793932824.5749102,
+    "seen": 1793933087.4622653,
+    "ast_hash": "a7b719f26ae0ca2095db9b7a680c9171",
+    "semantic_hash": ""
+  },
+  "packages/db/src/dispute-sources.ts": {
+    "mtime": 1793931075.0645454,
+    "seen": 1793933087.4554465,
+    "ast_hash": "c792521955a5900851b0fd873138f24a",
+    "semantic_hash": ""
+  },
+  "packages/payments/src/disputes.ts": {
+    "mtime": 1793932662.8495693,
+    "seen": 1793933087.4594214,
+    "ast_hash": "417156ea8d0e87de722bfd9498b50965",
+    "semantic_hash": ""
+  },
+  "packages/payments/src/evidence/pdf.ts": {
+    "mtime": 1793930864.2929747,
+    "seen": 1793933087.4594238,
+    "ast_hash": "a18a9537a38926514a284ab0d2498bcf",
+    "semantic_hash": ""
+  },
+  "packages/payments/src/evidence/plan.ts": {
+    "mtime": 1793930919.8241143,
+    "seen": 1793933087.4594285,
+    "ast_hash": "6720f671a54a4d0bd1cd04b9b31e4ea3",
+    "semantic_hash": ""
+  },
+  "packages/payments/test/disputes.test.ts": {
+    "mtime": 1793932555.7976348,
+    "seen": 1793933087.4615407,
+    "ast_hash": "e59adf5cf52b276240ff91caecfbf7dd",
+    "semantic_hash": ""
+  },
+  "packages/payments/test/evidence-pdf.test.ts": {
+    "mtime": 1793930828.4468534,
+    "seen": 1793933087.4615438,
+    "ast_hash": "1cae8d22f61a39055cc69a6c1486f5b8",
+    "semantic_hash": ""
+  },
+  "packages/payments/test/evidence-plan.test.ts": {
+    "mtime": 1793930899.5359366,
+    "seen": 1793933087.4615455,
+    "ast_hash": "738246592f393479b676f2b3d2e13203",
     "semantic_hash": ""
   },
   "pnpm-lock.yaml": {

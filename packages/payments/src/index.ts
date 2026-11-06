@@ -9,6 +9,7 @@ export * from './authorizations.ts';
 export * from './refunds.ts';
 export * from './evidence/plan.ts';
 export * from './evidence/pdf.ts';
+export * from './disputes.ts';
 export * from './webhooks/verify.ts';
 export * from './webhooks/verify-offline.ts';
 export * from './webhooks/verify-postback.ts';
