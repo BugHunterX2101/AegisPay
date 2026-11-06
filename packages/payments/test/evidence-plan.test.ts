@@ -148,7 +148,7 @@ describe('planEvidence: invariants over every combination of facts', () => {
           expect(r.missing.length).toBeGreaterThan(0);
           continue;
         }
-        expect(r.documents.length).toBeLessThanOrEqual(MAX_FILES);
+        expect(r.documents.length).toBeLessThanOrEqual(3); // PayPal's documented limit, not our constant
         expect(new Set(r.documents).size).toBe(r.documents.length);
         for (const e of r.evidences) {
           if (e.evidenceType === 'PROOF_OF_FULFILLMENT') expect(e.evidenceInfo?.tracking_info?.length).toBe(1);
@@ -190,8 +190,14 @@ describe('buildEvidenceInput', () => {
   });
 
   it('accepts exactly 2000 characters and rejects 2001 instead of cutting them', () => {
-    expect(() => buildEvidenceInput(plan, 'a'.repeat(MAX_NOTES_CHARS))).not.toThrow();
-    expect(() => buildEvidenceInput(plan, 'a'.repeat(MAX_NOTES_CHARS + 1))).toThrow(DomainError);
+    // literals, because these are PayPal's documented limits; deriving them from the constant would let a wrong constant pass
+    expect(() => buildEvidenceInput(plan, 'a'.repeat(2000))).not.toThrow();
+    expect(() => buildEvidenceInput(plan, 'a'.repeat(2001))).toThrow(DomainError);
+  });
+
+  it('pins the limits to PayPal\'s documented values', () => {
+    expect(MAX_FILES).toBe(3);
+    expect(MAX_NOTES_CHARS).toBe(2000);
   });
 
   it('rejects blank notes', () => {
