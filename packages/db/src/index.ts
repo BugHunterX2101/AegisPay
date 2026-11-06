@@ -8,3 +8,7 @@ export * from './fulfillment.ts';
 export * from './refunds.ts';
 export * from './disputes.ts';
 export * from './dispute-sources.ts';
+export * from './mandates.ts';
+export * from './catalog.ts';
+export * from './webhook-events.ts';
+export * from './suppliers.ts';
