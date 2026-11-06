@@ -12,6 +12,7 @@
     "@aegis/core": "workspace:*",
     "@aegis/db": "workspace:*",
     "@aegis/gatekeeper": "workspace:*",
+    "@aegis/jobs": "workspace:*",
     "@aegis/payments": "workspace:*",
     "pg-boss": "12.38.0",
     "zod": "4.6.7"

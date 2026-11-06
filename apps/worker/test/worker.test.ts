@@ -6,7 +6,7 @@ import { TEST_URL } from '@aegis/db/testing';
 import { CertCache, authorizeHold, createHold } from '@aegis/payments';
 import { seedFulfillment, seedGatedOrder, startHarness } from '../../../packages/payments/test/harness.ts';
 import type { Harness } from '../../../packages/payments/test/harness.ts';
-import { QUEUE, QUEUE_DEFS, SCHEDULES } from '../src/queues.ts';
+import { QUEUE, QUEUE_DEFS, SCHEDULES } from '@aegis/jobs';
 import { createWorker } from '../src/worker.ts';
 import type { WorkerHandle } from '../src/worker.ts';
 

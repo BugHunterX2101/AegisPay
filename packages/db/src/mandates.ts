@@ -176,7 +176,7 @@ async function insertVersion(
  * enough: amending inserts a NEW row, so a concurrent amender that was waiting on the old row wakes up, re-reads the
  * same old version, and collides on the primary key instead of seeing the new one.
  */
-async function lockMandate(tx: Tx, id: string): Promise<void> {
+export async function lockMandate(tx: Tx, id: string): Promise<void> {
   await tx.query(`select pg_advisory_xact_lock(hashtextextended($1, 0))`, [`mandate:${id}`]);
 }
 

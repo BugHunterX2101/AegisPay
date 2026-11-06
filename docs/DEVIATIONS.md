@@ -75,6 +75,19 @@ None of these can be settled without a buyer-approved transaction and a buyer-fi
 - The 50 MB per-call check **cannot be reached** while at most 3 files, each under 10 MB, are allowed (3 x 10 MB < 50 MB). It is kept as a backstop and a test asserts that arithmetic, so a future change to either limit fails loudly.
 - The graph (`graphify-out`) indexes the SQL migrations when `tree_sitter_sql` is installed (`pip install tree-sitter-sql`).
 
+## 5b. API decisions that differ from, or go beyond, the TDD
+
+- **`@aegis/jobs` package.** Queue names, payload schemas and the `JobSender` moved out of the worker so the API can queue jobs without importing another app. Apps still never import each other.
+- **Transactional outbox for delivery and void.** `/deliver` inserts the capture job, and `/void` the void job, in the same database transaction as the state change and audit row (pg-boss `db` option). The worker's poller does not look at DELIVERED orders, so a separately queued job could be lost by a crash between commit and enqueue.
+- **Webhook listener "always 200" has one exception.** A failure to *store* the event returns 500 so PayPal redelivers; acknowledging an event we did not keep would lose it. A payload with no id or event type, or not JSON, gets 200 `{received:false}`. Failing to queue the nudge is not fatal: the stored event is swept every minute. The listener keeps the exact raw bytes (own scoped content-type parser, 1 MB limit); `fastify-raw-body` is unused.
+- **Anonymous session, no login.** Judge Mode gives each visitor a signed HttpOnly `aegis_sid` cookie plus a CSRF double-submit token on every non-GET `/api` call. It is an identity for the audit log, not authentication; the app says it is a sandbox demo.
+- **Order creation re-checks under the mandate lock** that the mandate version is current (R2, `DECISION_STALE`), ACTIVE and unexpired, and that `spent + amount <= budget` (R6, `GATE_FAILED`), so two simultaneous approvals cannot both spend the same budget.
+- **`authorize` reads the PayPal order id from the database,** not from the client.
+- **Repeat `/deliver`** on a DELIVERED order re-nudges the (singleton) capture job and returns `applied:false`; on an order already SETTLED it is refused with `BAD_STATE`.
+- **Stream scope.** The SSE stream emits `order.upsert` and `dispute.upsert` only. `webhook.verified`, `gate.decision`, `agent.step`, `mandate.draft` and `selfcheck.result` arrive with the agents and selfcheck slices.
+- **Judge-Mode clock.** The offset is held in one process today. Before the demo-clock route ships it must be persisted in the database so the worker sees the same clock.
+- **Audit tamper test** switches off the append-only trigger inside a transaction to forge a row, then restores it; the table refuses `UPDATE` for every normal path.
+
 ## 6. What is needed from the owner
 
 1. A sandbox **buyer** login (or approve one order manually) so capture, refund and dispute flows can run against the real sandbox.

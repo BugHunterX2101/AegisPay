@@ -1,7 +1,8 @@
 import { PgBoss } from 'pg-boss';
 import type { Job } from 'pg-boss';
-import { z } from 'zod';
 import type { Clock } from '@aegis/core';
+import { PAYLOAD, QUEUE, QUEUE_DEFS, SCHEDULES, ensureQueues, jobKey } from '@aegis/jobs';
+import type { QueueName } from '@aegis/jobs';
 import type { WebhookFollowUp, WebhookPipeline } from '@aegis/payments';
 import {
   classifyFailure,
@@ -15,8 +16,8 @@ import {
   runWebhookSweep,
 } from './jobs.ts';
 import type { WorkerDeps } from './jobs.ts';
-import { QUEUE, QUEUE_DEFS, SCHEDULES } from './queues.ts';
-import type { QueueName } from './queues.ts';
+
+export { jobKey };
 
 export type Log = (level: 'info' | 'warn' | 'error', event: string, fields?: Record<string, unknown>) => void;
 
@@ -45,19 +46,7 @@ export interface WorkerHandle {
   stop(): Promise<void>;
 }
 
-const Uuid = z.string().uuid();
-const Schemas = {
-  [QUEUE.webhookProcess]: z.object({ eventId: z.string().optional() }),
-  [QUEUE.paymentCapture]: z.object({ orderId: Uuid }),
-  [QUEUE.paymentVoid]: z.object({ orderId: Uuid, reason: z.enum(['SLA_BREACH', 'CANCEL']), confirmedBy: z.string().min(1).optional() }),
-  [QUEUE.trackingPush]: z.object({ orderId: Uuid, captureId: z.string().min(1) }),
-} as const;
-
-/** Send helpers the API and the worker share, so the singleton keys cannot drift apart. */
-export const jobKey = {
-  webhook: (eventId: string) => eventId,
-  order: (orderId: string) => orderId,
-};
+const Schemas = PAYLOAD;
 
 export async function createWorker(o: WorkerOptions): Promise<WorkerHandle> {
   const log = o.log ?? jsonLog;
@@ -78,10 +67,7 @@ export async function createWorker(o: WorkerOptions): Promise<WorkerHandle> {
     },
   };
 
-  for (const q of QUEUE_DEFS) {
-    const { name, ...opts } = q;
-    await boss.createQueue(name, opts);
-  }
+  await ensureQueues(boss);
 
   const poll = o.pollingIntervalSeconds !== undefined ? { pollingIntervalSeconds: o.pollingIntervalSeconds } : {};
   const deferMs = (o.deferSeconds ?? 60) * 1000;

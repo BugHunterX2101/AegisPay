@@ -11,6 +11,7 @@
     "@aegis/core": "workspace:*",
     "@aegis/db": "workspace:*",
     "@aegis/gatekeeper": "workspace:*",
+    "@aegis/jobs": "workspace:*",
     "@aegis/payments": "workspace:*",
     "@fastify/cookie": "11.1.5",
     "@fastify/csrf-protection": "8.0.2",

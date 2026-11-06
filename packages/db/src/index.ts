@@ -12,3 +12,5 @@ export * from './mandates.ts';
 export * from './catalog.ts';
 export * from './webhook-events.ts';
 export * from './suppliers.ts';
+export * from './order-flow.ts';
+export * from './views.ts';
