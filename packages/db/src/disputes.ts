@@ -84,6 +84,12 @@ export async function listOpenDisputeIds(db: Queryable, limit = 100): Promise<st
   return r.rows.map((x) => x.paypal_dispute_id);
 }
 
+/** Every dispute we know of, most recently updated first. A demo has a handful; the list is capped anyway. */
+export async function listDisputes(db: Queryable, limit = 100): Promise<DisputeRow[]> {
+  const r = await db.query<DisputeDbRow>('select * from dispute order by updated_at desc nulls last, paypal_dispute_id limit $1', [limit]);
+  return r.rows.map(toDispute);
+}
+
 /** The order whose PayPal capture is the disputed transaction (`disputed_transactions[].seller_transaction_id`). */
 export async function findOrderIdByCaptureId(db: Queryable, captureId: string): Promise<string | null> {
   const r = await db.query<{ id: string }>('select id from purchase_order where capture_id = $1', [captureId]);

@@ -7,6 +7,7 @@ import { installErrorHandling } from './errors.ts';
 import { toJson } from './json.ts';
 import { registerAgentRoutes } from './routes/agents.ts';
 import { registerAuditRoutes } from './routes/audit.ts';
+import { registerDisputeRoutes } from './routes/disputes.ts';
 import { registerMandateRoutes } from './routes/mandates.ts';
 import { registerOrderRoutes } from './routes/orders.ts';
 import { registerWebhooks } from './routes/webhooks.ts';
@@ -61,6 +62,7 @@ export async function buildApp(o: BuildAppOptions): Promise<FastifyInstance> {
   registerMandateRoutes(app, o.deps);
   registerAgentRoutes(app, o.deps);
   registerOrderRoutes(app, o.deps);
+  registerDisputeRoutes(app, o.deps);
   registerAuditRoutes(app, o.deps);
 
   const hub = new StreamHub(o.deps.db, (level, event, fields) => app.log[level]({ ...fields, event }));

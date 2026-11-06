@@ -449,6 +449,72 @@ describe('order flow', () => {
   });
 });
 
+describe('disputes', () => {
+  /** A real settled order, then a dispute PayPal opened on its capture. */
+  async function settledOrder(v: Visitor) {
+    const o = await held(v);
+    expect((await v.post(`/api/orders/${o.orderId}/ship`, { carrier: 'UPS', trackingNumber: '1Z999AA10123456784' })).statusCode).toBe(200);
+    expect((await v.post(`/api/orders/${o.orderId}/deliver`)).statusCode).toBe(202);
+    await until('order SETTLED by the worker', async () => (await stateOf(o.orderId)) === 'SETTLED');
+    return { ...o, captureId: (await getOrder(h.t.db, o.orderId))!.captureId! };
+  }
+
+  it('syncs a dispute, builds a bundle for a human to read, and sends it only after attestation', async () => {
+    const v = await visitor();
+    const o = await settledOrder(v);
+    const pp = h.pp.addDispute({ captureId: o.captureId, reason: 'MERCHANDISE_OR_SERVICE_NOT_RECEIVED' });
+
+    // Not known to us until we pull it.
+    expect((await v.get(`/api/disputes/${pp.id}`)).statusCode).toBe(404);
+    const sync = await v.post(`/api/disputes/${pp.id}/sync`);
+    expect(sync.statusCode, sync.body).toBe(200);
+    expect(sync.json()).toMatchObject({ orderId: o.orderId, orderState: 'DISPUTED', moved: 'DISPUTED' });
+    expect((await v.get('/api/disputes')).json<{ disputes: Array<{ paypalDisputeId: string }> }>().disputes.map((x) => x.paypalDisputeId)).toContain(pp.id);
+
+    const plan = await v.post(`/api/disputes/${pp.id}/plan`);
+    expect(plan.statusCode, plan.body).toBe(201);
+    const built = plan.json<{ status: string; bundle: { id: string; sha256: string; notes: string; files: Array<{ name: string; sha256: string }> } }>();
+    expect(built.status).toBe('BUILT');
+    expect(built.bundle.notes).toContain('1Z999AA10123456784');
+    expect(built.bundle.files.length).toBeGreaterThan(0);
+
+    // The human reads the exact bytes that would be sent.
+    const file = built.bundle.files[0]!;
+    const pdf = await v.get(`/api/evidence/${built.bundle.id}/files/${file.name}`);
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.headers['content-type']).toBe('application/pdf');
+    expect(pdf.rawPayload.subarray(0, 4).toString()).toBe('%PDF');
+    expect(pdf.headers['x-content-sha256']).toBe(file.sha256);
+    expect((await v.get(`/api/evidence/${built.bundle.id}/files/..%2Fx.pdf`)).statusCode).toBe(400);
+
+    // No attestation, no send; a bundle of another dispute is refused.
+    expect((await v.post(`/api/disputes/${pp.id}/submit`, { bundleId: built.bundle.id })).statusCode).toBe(400);
+    expect((await v.post(`/api/disputes/${pp.id}/submit`, { bundleId: built.bundle.id, attested: false })).statusCode).toBe(400);
+    expect((await v.post(`/api/disputes/PP-D-OTHER/submit`, { bundleId: built.bundle.id, attested: true })).statusCode).toBe(404);
+    expect(await stateOf(o.orderId)).toBe('DISPUTED');
+
+    const sent = await v.post(`/api/disputes/${pp.id}/submit`, { bundleId: built.bundle.id, attested: true });
+    expect(sent.statusCode, sent.body).toBe(200);
+    expect(sent.json()).toMatchObject({ submitted: true, orderId: o.orderId });
+    expect(await stateOf(o.orderId)).toBe('EVIDENCE_SUBMITTED');
+
+    // Once sent it cannot be sent again.
+    expect((await v.post(`/api/disputes/${pp.id}/submit`, { bundleId: built.bundle.id, attested: true })).statusCode).toBe(409);
+
+    const detail = (await v.get(`/api/disputes/${pp.id}`)).json<{ bundle: { reviewedBy: string; submittedAt: string }; events: Array<{ type: string }> }>();
+    expect(detail.bundle.reviewedBy).toBe(v.actor.replace(/^user:/, ''));
+    expect(detail.bundle.submittedAt).toBeTruthy();
+    expect(detail.events.map((e) => e.type)).toEqual(expect.arrayContaining(['DISPUTE_SYNCED', 'EVIDENCE_BUNDLE_BUILT', 'EVIDENCE_REVIEWED', 'EVIDENCE_SUBMITTED']));
+    expect((await v.get('/api/audit/verify')).json()).toMatchObject({ ok: true });
+  });
+
+  it('refuses a malformed dispute id and a plan for a dispute that was never synced', async () => {
+    const v = await visitor();
+    expect((await v.get('/api/disputes/a%20b')).statusCode).toBe(400);
+    expect((await v.post('/api/disputes/PP-D-UNKNOWN/plan')).statusCode).toBe(404);
+  });
+});
+
 describe('GET /api/audit/verify', () => {
   it('reports an intact chain with its head and count, and reports the first bad row when a row is tampered with', async () => {
     const v = await visitor();
