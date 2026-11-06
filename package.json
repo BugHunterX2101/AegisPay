@@ -1,0 +1,39 @@
+{
+  "name": "aegispay",
+  "private": true,
+  "version": "1.0.0",
+  "description": "AegisPay — a control plane that lets SMBs hand procurement to AI agents without handing them the wallet. PayPal authorization holds, proof-gated capture, autonomous dispute defense.",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@11.10.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n api,worker,web -c blue,magenta,green \"pnpm --filter @aegis/api dev\" \"pnpm --filter @aegis/worker dev\" \"pnpm --filter @aegis/web dev\"",
+    "build": "pnpm --filter @aegis/web build",
+    "start:api": "pnpm --filter @aegis/api start",
+    "start:worker": "pnpm --filter @aegis/worker start",
+    "migrate": "pnpm --filter @aegis/db migrate",
+    "typecheck": "tsc -p tsconfig.json --noEmit && pnpm --filter @aegis/web typecheck",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:sandbox": "vitest run --config vitest.sandbox.config.ts",
+    "seed": "tsx scripts/seed.ts",
+    "selfcheck": "tsx scripts/selfcheck.ts",
+    "register-webhook": "tsx scripts/register-webhook.ts",
+    "nightly": "tsx scripts/nightly.ts",
+    "e2e": "playwright test -c e2e/playwright.config.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "@vitest/coverage-v8": "^5.1.0",
+    "concurrently": "^10.0.6",
+    "fast-check": "^4.10.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

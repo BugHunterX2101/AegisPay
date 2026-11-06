@@ -1,0 +1,14 @@
+packages:
+  - apps/*
+  - packages/*
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - '@ai-sdk/anthropic@4.0.97'
+  - '@ai-sdk/gateway@4.0.136'
+  - '@ai-sdk/provider-utils@5.0.75'
+  - '@ai-sdk/provider@4.0.36'
+  - '@fastify/static@10.1.10'
+  - ai@7.0.163
+overrides:
+  tslib: 2.9.1

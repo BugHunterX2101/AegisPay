@@ -1,0 +1,15 @@
+{
+  "name": "@aegis/payments",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@aegis/core": "workspace:*",
+    "@aegis/db": "workspace:*",
+    "@paypal/paypal-server-sdk": "2.5.0",
+    "buffer-crc32": "1.0.0",
+    "pdf-lib": "1.17.1",
+    "zod": "4.6.7"
+  }
+}
