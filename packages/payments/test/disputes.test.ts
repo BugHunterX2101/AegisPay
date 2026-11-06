@@ -633,12 +633,60 @@ describe('submitting evidence', () => {
     expect(await state(x.orderId)).toBe('EVIDENCE_SUBMITTED');
   });
 
-  it('a transient 5xx is retried and PayPal still receives the evidence once', async () => {
+  it('a 5xx on the evidence POST is NOT retried (PayPal cannot recognise a replay), and the bundle stays unsubmitted', async () => {
     const x = await reviewed();
     h.pp.failures.push({ match: /POST \/v1\/customer\/disputes\/.+\/provide-evidence/, count: 1, status: 503 });
+    const err = (await submitEvidence(h.ctx, x.bundleId, OWNER).catch((e: unknown) => e)) as DomainError;
+    expect(err.code).toBe('PAYPAL_ERROR');
+    expect(h.sleeps).toHaveLength(0); // no back-off, because there was no retry
+    expect(h.pp.seen.filter((c) => c.method === 'POST' && c.path.endsWith('/provide-evidence'))).toHaveLength(1);
+    expect(x.d.received).toHaveLength(0);
+    expect(await state(x.orderId)).toBe('DISPUTED');
+    // A person can submit again once they have looked at PayPal; nothing was marked submitted.
     await submitEvidence(h.ctx, x.bundleId, OWNER);
-    expect(h.sleeps.length).toBeGreaterThan(0);
     expect(x.d.received).toHaveLength(1);
+  });
+
+  it('crash window: PayPal accepted the evidence but our commit failed, so the next submit finishes locally and sends nothing', async () => {
+    const x = await reviewed();
+    // Make the local commit fail AFTER PayPal has answered 2xx (the audit row of the successful call is written in its own transaction).
+    await h.t.db.query(`create function fail_submit() returns trigger language plpgsql as $$ begin raise exception 'simulated crash after PayPal accepted'; end $$`);
+    await h.t.db.query(
+      `create trigger fail_submit before update of submitted_at on evidence_bundle for each row when (new.submitted_at is not null) execute function fail_submit()`,
+    );
+    try {
+      await expect(submitEvidence(h.ctx, x.bundleId, OWNER)).rejects.toThrow(/simulated crash/);
+    } finally {
+      await h.t.db.query('drop trigger fail_submit on evidence_bundle');
+      await h.t.db.query('drop function fail_submit()');
+    }
+    expect(x.d.received).toHaveLength(1); // PayPal has it
+    expect(await state(x.orderId)).toBe('DISPUTED'); // we do not know yet
+    expect((await h.t.db.query('select submitted_at from evidence_bundle where id = $1', [x.bundleId])).rows[0].submitted_at).toBeNull();
+
+    h.pp.seen.length = 0;
+    const r = await submitEvidence(h.ctx, x.bundleId, OWNER);
+    expect(h.pp.seen).toHaveLength(0); // no GET, no POST: nothing went to PayPal
+    expect(x.d.received).toHaveLength(1); // still exactly one copy at PayPal
+    expect(r.paypalResponse).toBeNull();
+    expect(await state(x.orderId)).toBe('EVIDENCE_SUBMITTED');
+    expect((await h.t.db.query('select submitted_at from evidence_bundle where id = $1', [x.bundleId])).rows[0].submitted_at).not.toBeNull();
+    expect(await auditTypes(x.disputeId)).toContain('EVIDENCE_SUBMIT_RECOVERED');
+    expect(await auditTypes(x.disputeId)).not.toContain('EVIDENCE_SUBMITTED');
+    // and it cannot be recovered twice
+    expect(await code(submitEvidence(h.ctx, x.bundleId, OWNER))).toBe('BAD_STATE');
+  });
+
+  it('a failed send leaves no accepted-call row, so it is not mistaken for a crash-window success', async () => {
+    const x = await reviewed();
+    h.pp.failures.push({ match: /POST \/v1\/customer\/disputes\/.+\/provide-evidence/, count: 1, status: 503 });
+    await submitEvidence(h.ctx, x.bundleId, OWNER).catch(() => undefined);
+    h.pp.seen.length = 0;
+    await submitEvidence(h.ctx, x.bundleId, OWNER); // a real second attempt: GET + POST
+    expect(h.pp.seen.some((c) => c.method === 'POST' && c.path.endsWith('/provide-evidence'))).toBe(true);
+    expect(x.d.received).toHaveLength(1);
+    expect(await auditTypes(x.disputeId)).toContain('EVIDENCE_SUBMITTED');
+    expect(await auditTypes(x.disputeId)).not.toContain('EVIDENCE_SUBMIT_RECOVERED');
   });
 
   it('a manual-review reason (anything unrecognised) still builds, reviews and submits', async () => {

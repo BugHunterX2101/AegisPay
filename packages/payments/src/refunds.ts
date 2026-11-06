@@ -1,7 +1,10 @@
 import { PaymentsController } from '@paypal/paypal-server-sdk';
 import type { Refund } from '@paypal/paypal-server-sdk';
 import { DomainError, usd } from '@aegis/core';
-import { appendAudit, getOrderBundle, insertRefund, listRefunds, refundedMinor, transition, withTx } from '@aegis/db';
+import {
+  appendAudit, getOrderBundle, getRefundRow, insertRefund, listPendingRefunds, listRefunds, refundedMinor, settleRefund, transition,
+  withAdvisoryLock, withTx,
+} from '@aegis/db';
 import type { RefundStatus } from '@aegis/db';
 import { hasIssue, paypalCall } from './call.ts';
 import type { PayPalContext } from './client.ts';
@@ -32,8 +35,9 @@ const KNOWN: ReadonlySet<string> = new Set<RefundStatus>(['COMPLETED', 'PENDING'
  * Refund a settled order's capture, in full or in part.
  *
  * - Needs a named human (`confirmedBy`) and a reason; the order must be SETTLED or DISPUTED and have a capture id.
- * - The cumulative refunds can never exceed the capture. The check here is a fast, clear failure; PayPal's own
- *   REFUND_AMOUNT_EXCEEDED is the backstop under concurrency and is mapped to the same error.
+ * - The cumulative refunds can never exceed the capture. Refunds for one order are serialised by a per-order advisory
+ *   lock (see withAdvisoryLock), so the local check is authoritative across processes; PayPal's own
+ *   REFUND_AMOUNT_EXCEEDED stays as a backstop and is mapped to the same error.
  * - The idempotency attempt is (refunds recorded so far + 1). A retry after a lost response re-sends the SAME
  *   request id and PayPal replays the original refund; a refund that was recorded moves the next one to a new id.
  * - A partial refund keeps the order SETTLED. It moves to REFUNDED only when COMPLETED + PENDING refunds equal the
@@ -44,6 +48,13 @@ export async function refundCapture(ctx: PayPalContext, orderRowId: string, inpu
   if (!input.reason.trim()) throw new DomainError('VALIDATION', 'a refund needs a reason');
   if (input.amountMinor !== undefined && input.amountMinor <= 0n) throw new DomainError('VALIDATION', 'refund amount must be positive');
 
+  // Everything from reading the ledger to recording PayPal's answer runs under one per-order lock. Without it two
+  // concurrent refunds both read "nothing refunded yet", pick the same idempotency attempt, and rely on PayPal to sort
+  // it out. With it the second one sees the first one's refund and gets the right attempt and the right remainder.
+  return withAdvisoryLock(`refund:${orderRowId}`, () => refundLocked(ctx, orderRowId, input), ctx.db);
+}
+
+async function refundLocked(ctx: PayPalContext, orderRowId: string, input: RefundInput): Promise<RefundResult> {
   const bundle = await getOrderBundle(ctx.db, orderRowId);
   if (!bundle) throw new DomainError('NOT_FOUND', `Order ${orderRowId} not found`);
   const { order } = bundle;
@@ -143,4 +154,100 @@ export async function refundCapture(ctx: PayPalContext, orderRowId: string, inpu
     });
     return { refundId: refund.id!, status: status as RefundStatus, amountMinor, refundedMinor: total, fullyRefunded };
   }, ctx.db);
+}
+
+export interface RefundReconciliation {
+  refundId: string;
+  orderId: string;
+  before: RefundStatus;
+  after: RefundStatus;
+  /** True when the order moved to REFUNDED because this refund was the last thing outstanding. */
+  orderRefunded: boolean;
+}
+
+/**
+ * Follow one PENDING refund to the status PayPal now reports (GET /v2/payments/refunds/{id}).
+ *
+ * A PENDING refund counts against the capture the moment it is made, so without this an order whose refund later
+ * COMPLETED would never reach REFUNDED, and one whose refund FAILED would keep money "refunded" that never left.
+ *  - COMPLETED: the refund stands; if the captured amount is now fully refunded and nothing else is pending, the order
+ *    moves to REFUNDED.
+ *  - FAILED / CANCELLED: the refund stops counting, so that amount can be refunded again.
+ *  - still PENDING: nothing changes and nothing is audited (this runs on a poll).
+ * Serialised with refundCapture by the same per-order lock, so a reconcile can never interleave with a new refund.
+ */
+export async function reconcileRefund(ctx: PayPalContext, refundId: string): Promise<RefundReconciliation | null> {
+  const row = await getRefundRow(ctx.db, refundId);
+  if (!row) throw new DomainError('NOT_FOUND', `Refund ${refundId} is not on record`);
+  if (row.status !== 'PENDING') return null;
+
+  return withAdvisoryLock(`refund:${row.orderId}`, async () => {
+    const current = await getRefundRow(ctx.db, refundId);
+    if (!current || current.status !== 'PENDING') return null; // settled by someone else while we waited
+
+    const res = await paypalCall<Refund>({
+      db: ctx.db,
+      action: 'get',
+      orderRowId: row.orderId,
+      write: false,
+      ...(ctx.deps ? { deps: ctx.deps } : {}),
+      onUnauthorized: () => ctx.handleUnauthorized(),
+      run: () => payments(ctx).getRefund({ refundId }),
+    });
+    const live = res.result.status;
+    if (!live || !KNOWN.has(live)) {
+      throw new DomainError('PAYPAL_ERROR', `PayPal reported refund ${refundId} with unknown status ${String(live)}`, {
+        ...(res.debugId ? { paypalDebugId: res.debugId } : {}),
+      });
+    }
+    if (live === 'PENDING') return null;
+
+    return withTx(async (tx) => {
+      const settled = await settleRefund(tx, refundId, live as RefundStatus);
+      if (!settled) return null;
+      const bundle = await getOrderBundle(tx, row.orderId);
+      const order = bundle!.order;
+      const total = await refundedMinor(tx, row.orderId);
+      const stillPending = (await listRefunds(tx, row.orderId)).some((r) => r.status === 'PENDING');
+      let orderRefunded = false;
+      if (live === 'COMPLETED' && total >= order.amountMinor && !stillPending && (order.state === 'SETTLED' || order.state === 'DISPUTED')) {
+        const r = await transition(tx, row.orderId, ['SETTLED', 'DISPUTED'], 'REFUNDED');
+        if (r === 'CONFLICT') throw new DomainError('CONCURRENT_UPDATE', 'order changed state while its refund was being reconciled', { details: { refundId } });
+        orderRefunded = true;
+      }
+      await appendAudit(tx, {
+        actor: 'system:reconcile',
+        type: 'REFUND_STATUS_CHANGED',
+        entity: 'purchase_order',
+        entityId: row.orderId,
+        ...(res.debugId ? { paypalDebugId: res.debugId } : {}),
+        payload: {
+          refundId,
+          from: 'PENDING',
+          to: live,
+          amountMinor: row.amountMinor.toString(),
+          refundedMinor: total.toString(),
+          captureAmountMinor: order.amountMinor.toString(),
+          orderRefunded,
+          orderState: order.state,
+        },
+      });
+      return { refundId, orderId: row.orderId, before: 'PENDING' as const, after: live as RefundStatus, orderRefunded };
+    }, ctx.db);
+  }, ctx.db);
+}
+
+/** One reconcile pass over every PENDING refund. A failure on one refund is reported, never allowed to stop the rest. */
+export async function reconcilePendingRefunds(ctx: PayPalContext): Promise<{ changed: RefundReconciliation[]; errors: Array<{ refundId: string; error: string }> }> {
+  const changed: RefundReconciliation[] = [];
+  const errors: Array<{ refundId: string; error: string }> = [];
+  for (const r of await listPendingRefunds(ctx.db)) {
+    try {
+      const out = await reconcileRefund(ctx, r.refundId);
+      if (out) changed.push(out);
+    } catch (err) {
+      errors.push({ refundId: r.refundId, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return { changed, errors };
 }

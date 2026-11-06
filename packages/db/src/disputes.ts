@@ -148,6 +148,26 @@ export async function markBundleReviewed(tx: Queryable, id: string, reviewedBy: 
 }
 
 /** Compare-and-set: a bundle is submitted at most once, so a retry cannot overwrite the first PayPal response. */
+/**
+ * The crash window between "PayPal accepted the evidence" and "we committed that fact": paypalCall writes its
+ * PAYPAL_CALL audit row in its own transaction, so a successful provide-evidence call leaves an `ok:true` row filed
+ * under the bundle even if the submit transaction later rolled back or the process died. Returns that row, if any.
+ */
+export async function acceptedEvidenceCall(
+  db: Queryable,
+  bundleId: string,
+): Promise<{ seq: bigint; paypalRequestId: string | null; paypalDebugId: string | null } | null> {
+  const r = await db.query<{ seq: bigint; paypal_request_id: string | null; paypal_debug_id: string | null }>(
+    `select seq, paypal_request_id, paypal_debug_id from audit_event
+      where entity = 'evidence_bundle' and entity_id = $1 and type = 'PAYPAL_CALL'
+        and payload->>'action' = 'dispute_evidence' and payload->>'ok' = 'true'
+      order by seq desc limit 1`,
+    [bundleId],
+  );
+  const row = r.rows[0];
+  return row ? { seq: row.seq, paypalRequestId: row.paypal_request_id, paypalDebugId: row.paypal_debug_id } : null;
+}
+
 export async function markBundleSubmitted(tx: Queryable, id: string, paypalResponse: unknown): Promise<boolean> {
   const r = await tx.query(
     `update evidence_bundle set submitted_at = now(), paypal_response = $2::jsonb where id = $1 and submitted_at is null`,

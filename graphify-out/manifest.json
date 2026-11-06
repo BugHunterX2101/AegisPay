@@ -264,9 +264,9 @@
     "semantic_hash": ""
   },
   "packages/db/src/pool.ts": {
-    "mtime": 1793890117.7714064,
-    "seen": 1793890389.3022346,
-    "ast_hash": "be82646c3eb3f8bd66135820de85773b",
+    "mtime": 1793933465.0312831,
+    "seen": 1793936799.3864827,
+    "ast_hash": "042fc73b31705f438c66cc6ce1d31796",
     "semantic_hash": ""
   },
   "packages/db/test/audit.test.ts": {
@@ -306,9 +306,9 @@
     "semantic_hash": ""
   },
   "packages/payments/src/call.ts": {
-    "mtime": 1793892467.8173327,
-    "seen": 1793902701.8525753,
-    "ast_hash": "68583174c4e53461d4752c30bf30bf8b",
+    "mtime": 1793933846.5963588,
+    "seen": 1793936799.3865144,
+    "ast_hash": "47a43aed37db9b8eb224fb4fe480f869",
     "semantic_hash": ""
   },
   "packages/payments/src/config.ts": {
@@ -330,9 +330,9 @@
     "semantic_hash": ""
   },
   "packages/payments/test/call.test.ts": {
-    "mtime": 1793891014.1484122,
-    "seen": 1793891070.5556922,
-    "ast_hash": "8516d8a6a612c6d5a9d252f7a604a11d",
+    "mtime": 1793933879.558342,
+    "seen": 1793936799.3865428,
+    "ast_hash": "8c936e5183d11b5a92f9bcc90a10331e",
     "semantic_hash": ""
   },
   "packages/payments/test/config.test.ts": {
@@ -414,15 +414,15 @@
     "semantic_hash": ""
   },
   "packages/payments/test/paypal-server.ts": {
-    "mtime": 1793932552.9943488,
-    "seen": 1793933087.462263,
-    "ast_hash": "8fd530854bf67cc91ca623d40160bfa7",
+    "mtime": 1793933509.1026697,
+    "seen": 1793936799.3865607,
+    "ast_hash": "42d756cda2f64ab1c46fb110a17c7376",
     "semantic_hash": ""
   },
   "packages/payments/src/rest.ts": {
-    "mtime": 1793892506.0399458,
-    "seen": 1793902701.8528607,
-    "ast_hash": "412f06a105e8b57f4ab45d579185ee65",
+    "mtime": 1793933848.3449888,
+    "seen": 1793936799.3865304,
+    "ast_hash": "459ae655ec57a33199fb5e33fc6e5dfe",
     "semantic_hash": ""
   },
   "packages/payments/src/webhooks/simulate.ts": {
@@ -462,15 +462,15 @@
     "semantic_hash": ""
   },
   "packages/db/src/disputes.ts": {
-    "mtime": 1793931048.5403981,
-    "seen": 1793933087.4554496,
-    "ast_hash": "9bf6d5a6c5fde4b514fd6ee99f1fb206",
+    "mtime": 1793935996.6655827,
+    "seen": 1793936799.3864713,
+    "ast_hash": "2e48c97615710e50b178a25c0f558cc7",
     "semantic_hash": ""
   },
   "packages/db/src/refunds.ts": {
-    "mtime": 1793903227.7619746,
-    "seen": 1793903303.8366268,
-    "ast_hash": "48a62d67ce39689e20daf552b28e8f3f",
+    "mtime": 1793933534.1776593,
+    "seen": 1793936799.386486,
+    "ast_hash": "e03fa67267592f16be18d680cedc6342",
     "semantic_hash": ""
   },
   "packages/db/test/refund-dispute.test.ts": {
@@ -486,15 +486,15 @@
     "semantic_hash": ""
   },
   "packages/payments/src/refunds.ts": {
-    "mtime": 1793929576.4902666,
-    "seen": 1793929660.5110106,
-    "ast_hash": "48087e06968574c076c56fd0858d26ab",
+    "mtime": 1793933548.8647995,
+    "seen": 1793936799.3865268,
+    "ast_hash": "8aa71b2dbbc431580f3d54417b55aeb6",
     "semantic_hash": ""
   },
   "packages/payments/test/refunds.test.ts": {
-    "mtime": 1793932824.5749102,
-    "seen": 1793933087.4622653,
-    "ast_hash": "a7b719f26ae0ca2095db9b7a680c9171",
+    "mtime": 1793933613.3983295,
+    "seen": 1793936799.386562,
+    "ast_hash": "7c0af8087405e0fbf1ae232af10a8472",
     "semantic_hash": ""
   },
   "packages/db/src/dispute-sources.ts": {
@@ -504,9 +504,9 @@
     "semantic_hash": ""
   },
   "packages/payments/src/disputes.ts": {
-    "mtime": 1793932662.8495693,
-    "seen": 1793933087.4594214,
-    "ast_hash": "417156ea8d0e87de722bfd9498b50965",
+    "mtime": 1793936023.0752258,
+    "seen": 1793936799.386519,
+    "ast_hash": "659d8d952f51f1369af115670a60cf68",
     "semantic_hash": ""
   },
   "packages/payments/src/evidence/pdf.ts": {
@@ -522,21 +522,81 @@
     "semantic_hash": ""
   },
   "packages/payments/test/disputes.test.ts": {
-    "mtime": 1793932555.7976348,
-    "seen": 1793933087.4615407,
-    "ast_hash": "e59adf5cf52b276240ff91caecfbf7dd",
+    "mtime": 1793936060.3597012,
+    "seen": 1793936799.386547,
+    "ast_hash": "4149a2c911e611baebb0507e3a6a0fb9",
     "semantic_hash": ""
   },
   "packages/payments/test/evidence-pdf.test.ts": {
-    "mtime": 1793930828.4468534,
-    "seen": 1793933087.4615438,
-    "ast_hash": "1cae8d22f61a39055cc69a6c1486f5b8",
+    "mtime": 1793936293.9972725,
+    "seen": 1793936799.3865488,
+    "ast_hash": "c3cd66a7a086685cebe9f19f9cbdaf53",
     "semantic_hash": ""
   },
   "packages/payments/test/evidence-plan.test.ts": {
     "mtime": 1793930899.5359366,
     "seen": 1793933087.4615455,
     "ast_hash": "738246592f393479b676f2b3d2e13203",
+    "semantic_hash": ""
+  },
+  "packages/db/migrations/0001_init.sql": {
+    "mtime": 1793890111.9537137,
+    "seen": 1793936799.3864565,
+    "ast_hash": "ea37fc203fbaab59ce0bf9082d136129",
+    "semantic_hash": ""
+  },
+  "packages/db/migrations/0002_audit_guard.sql": {
+    "mtime": 1793890113.4688978,
+    "seen": 1793936799.3864586,
+    "ast_hash": "3a662c35b3a250a0bfd2e82b2198f146",
+    "semantic_hash": ""
+  },
+  "packages/db/migrations/0003_indexes.sql": {
+    "mtime": 1793890114.8916075,
+    "seen": 1793936799.3864603,
+    "ast_hash": "c3e551a55e7e950810a7655dc371ba81",
+    "semantic_hash": ""
+  },
+  "packages/db/migrations/0004_supplier_profile.sql": {
+    "mtime": 1793890116.2819278,
+    "seen": 1793936799.3864617,
+    "ast_hash": "4e6ccff066521053645d0541a94d9782",
+    "semantic_hash": ""
+  },
+  "packages/db/migrations/0005_refund.sql": {
+    "mtime": 1793902777.4546163,
+    "seen": 1793936799.386463,
+    "ast_hash": "93762cbe8d006a379f81f34026a47601",
+    "semantic_hash": ""
+  },
+  "packages/payments/test/bundle-integrity.test.ts": {
+    "mtime": 1793936182.8357382,
+    "seen": 1793936799.3865414,
+    "ast_hash": "f300474cc7e15ceec620aa6b91f706e1",
+    "semantic_hash": ""
+  },
+  "packages/payments/test/contract.sandbox.test.ts": {
+    "mtime": 1793933209.6763518,
+    "seen": 1793936799.386546,
+    "ast_hash": "0526d61e50e310d11385e9dfaf40f218",
+    "semantic_hash": ""
+  },
+  "packages/payments/test/holds.sandbox.test.ts": {
+    "mtime": 1793933819.876367,
+    "seen": 1793936799.3865557,
+    "ast_hash": "59012cfc32d7f0c673ffbbfeccae55a7",
+    "semantic_hash": ""
+  },
+  "vitest.sandbox.config.ts": {
+    "mtime": 1793933207.5960655,
+    "seen": 1793936799.3865767,
+    "ast_hash": "74987781bbe11abf9689f0a3d5cb9ea4",
+    "semantic_hash": ""
+  },
+  "docs/DEVIATIONS.md": {
+    "mtime": 1793936783.8388598,
+    "seen": 1793936799.3865798,
+    "ast_hash": "48ca6dd7ef7cd2f82a22a23d5f747986",
     "semantic_hash": ""
   },
   "pnpm-lock.yaml": {

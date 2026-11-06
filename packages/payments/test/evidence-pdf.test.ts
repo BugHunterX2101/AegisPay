@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
@@ -124,6 +125,22 @@ describe('renderPdfs', () => {
     const b = await renderPdfs(plan, FACTS);
     expect(a.map((f) => f.sha256)).toEqual(b.map((f) => f.sha256));
     expect(a.map((f) => f.bytes_base64)).toEqual(b.map((f) => f.bytes_base64));
+  });
+
+  it("refuses to render a document at or over PayPal's 10 MB per-file limit, naming the file", async () => {
+    // A product with an absurd feature list. pdf-lib deflates page content, so repetitive filler would shrink under the
+    // limit; random base64 text is close to incompressible, which makes the size predictable.
+    const line = () => randomBytes(60).toString('base64url');
+    const huge = { ...FACTS, snapshot: { ...FACTS.snapshot!, features: Array.from({ length: 220_000 }, line) } };
+    const err = (await renderPdfs(planFor(['PRODUCT_SNAPSHOT']), huge).catch((e: unknown) => e)) as DomainError;
+    expect(err).toBeInstanceOf(DomainError);
+    expect(err.code).toBe('VALIDATION');
+    expect(err.message).toMatch(/product-snapshot\.pdf is \d+ bytes, PayPal's limit is 10 MB per file/);
+  }, 180_000);
+
+  it('a normal-sized document is nowhere near the limit', async () => {
+    const [f] = await renderPdfs(planFor(['PRODUCT_SNAPSHOT']), FACTS);
+    expect(Buffer.from(f!.bytes_base64, 'base64').byteLength).toBeLessThan(100_000);
   });
 
   it('changes the hash when a fact changes', async () => {

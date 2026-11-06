@@ -82,6 +82,8 @@ export interface PayPalServer {
   orders: Map<string, Ord>;
   auths: Map<string, Auth>;
   captures: Map<string, Cap>;
+  /** every refund made, by id; a test can change `status` to play PayPal settling a PENDING refund */
+  refunds: Map<string, { id: string; captureId: string; status: string; amount: { currency_code: string; value: string } }>;
   failures: Failure[];
   /** the buyer approving the order in the PayPal popup */
   approve(orderId: string): void;
@@ -144,6 +146,7 @@ export async function startPayPalServer(): Promise<PayPalServer> {
   const orders = new Map<string, Ord>();
   const auths = new Map<string, Auth>();
   const captures = new Map<string, Cap>();
+  const refunds: PayPalServer['refunds'] = new Map();
   const disputes = new Map<string, Disp>();
   const invoices = new Set<string>();
   const idem = new Map<string, { status: number; body: unknown }>();
@@ -156,6 +159,7 @@ export async function startPayPalServer(): Promise<PayPalServer> {
     orders,
     auths,
     captures,
+    refunds,
     failures,
     captureStatus: 'COMPLETED',
     refundStatus: 'COMPLETED',
@@ -385,7 +389,14 @@ export async function startPayPalServer(): Promise<PayPalServer> {
       const refId = `REF-${++seq}`;
       c.refundedMinor += D(amt.value);
       c.refundIds.push(refId);
+      refunds.set(refId, { id: refId, captureId: c.id, status: self.refundStatus, amount: amt });
       return done({ status: 201, body: { id: refId, status: self.refundStatus, amount: amt, note_to_payer: body?.note_to_payer, create_time: now.toISOString() } });
+    }
+    m = /^GET \/v2\/payments\/refunds\/([^/]+)$/.exec(key);
+    if (m) {
+      const r = refunds.get(m[1]!);
+      if (!r) return err(404, 'RESOURCE_NOT_FOUND', 'The specified resource does not exist.', [{ issue: 'INVALID_RESOURCE_ID' }]);
+      return { status: 200, body: { id: r.id, status: r.status, amount: r.amount } };
     }
     m = /^(GET|POST) \/v1\/customer\/disputes\/([^/]+)(?:\/(provide-evidence))?$/.exec(key);
     if (m) {

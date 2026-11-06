@@ -46,6 +46,13 @@ export interface CallOptions<T> {
    * verification, disputes) name their own subject; `orderRowId` is then just the idempotency subject.
    */
   entity?: { type: string; id: string };
+  /**
+   * Whether a 5xx or a network error may be retried. Those outcomes are ambiguous: the request may already have been
+   * processed. Replaying is safe only when PayPal can recognise the replay (a PayPal-Request-Id on the request), so a
+   * write that does not send one (e.g. dispute evidence) sets this to false and surfaces the error instead of risking
+   * a duplicate. 401 (token refresh) and 429 (rate limit) mean "not processed" and are always retried. Default true.
+   */
+  retryAmbiguous?: boolean;
   /** Called on a 401 before the single retry: invalidate the token vault and rebuild the SDK client. */
   onUnauthorized?: () => void | Promise<void>;
   deps?: Partial<CallDeps>;
@@ -180,7 +187,7 @@ export async function paypalCall<T>(opts: CallOptions<T>): Promise<CallResult<T>
         delayMs = 0;
       } else if (f.status === 429 && retries429 < RETRY_429_MS.length) {
         delayMs = jitter(RETRY_429_MS[retries429++]!, deps.random);
-      } else if (((f.status !== undefined && f.status >= 500) || f.network) && retries5xx < RETRY_5XX_MS.length) {
+      } else if (((f.status !== undefined && f.status >= 500) || f.network) && opts.retryAmbiguous !== false && retries5xx < RETRY_5XX_MS.length) {
         delayMs = jitter(RETRY_5XX_MS[retries5xx++]!, deps.random);
       }
 

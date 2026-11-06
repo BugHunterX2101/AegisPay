@@ -63,6 +63,8 @@ export async function paypalRest<T>(ctx: PayPalContext, req: RestRequest): Promi
     entity: req.subject,
     write: req.write,
     ...(req.attempt ? { attempt: req.attempt } : {}),
+    // A write PayPal cannot recognise a replay of (no PayPal-Request-Id sent) must not be retried on 5xx / network.
+    retryAmbiguous: !(req.write && !req.idempotent),
     ...(ctx.deps ? { deps: ctx.deps } : {}),
     onUnauthorized: () => ctx.handleUnauthorized(),
     run: async ({ requestId }) => {

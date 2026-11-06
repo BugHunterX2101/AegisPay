@@ -3,7 +3,7 @@ import { DomainError } from '@aegis/core';
 import { getOrder, listRefunds, refundedMinor, transition, verifyChain, withTx } from '@aegis/db';
 import { capture } from '../src/authorizations.ts';
 import { authorizeHold, createHold } from '../src/orders.ts';
-import { refundCapture } from '../src/refunds.ts';
+import { reconcilePendingRefunds, reconcileRefund, refundCapture } from '../src/refunds.ts';
 import { paypalRequestId } from '../src/request-id.ts';
 import { seedFulfillment, seedGatedOrder, startHarness } from './harness.ts';
 import type { Harness } from './harness.ts';
@@ -180,19 +180,60 @@ describe('idempotency and PayPal as the backstop', () => {
     expect(await state(s.orderId)).toBe('SETTLED');
   });
 
-  it('two concurrent refunds can never move more money than the capture', async () => {
+  it('two concurrent refunds that cannot both fit: exactly one is sent, the other is refused locally', async () => {
     const s = await settled();
+    h.pp.delayMs = 60; // make the two callers genuinely overlap at PayPal
     const results = await Promise.allSettled([
       refundCapture(h.ctx, s.orderId, { amountMinor: 10000n, reason: 'a', confirmedBy: OWNER }),
       refundCapture(h.ctx, s.orderId, { amountMinor: 10000n, reason: 'b', confirmedBy: OWNER }),
     ]);
-    // Both callers may compute the same idempotency attempt and get the SAME refund replayed; what must never
-    // happen is two distinct refunds. Which interleaving occurs depends on timing, and both are safe.
-    const ids = new Set(results.flatMap((r) => (r.status === 'fulfilled' ? [r.value.refundId] : [])));
-    expect(ids.size).toBeLessThanOrEqual(1);
-    expect((await listRefunds(h.t.db, s.orderId)).length).toBeLessThanOrEqual(1);
-    expect(h.pp.captures.get(s.captureId)!.refundedMinor).toBeLessThanOrEqual(14040);
-    expect(await refundedMinor(h.t.db, s.orderId)).toBeLessThanOrEqual(14040n);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const lost = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+    expect((lost.reason as DomainError).code).toBe('AMOUNT_MISMATCH');
+    // The local lock made the decision: PayPal was asked once, not twice, so its own backstop was never needed.
+    expect(refundPosts()).toHaveLength(1);
+    expect(await listRefunds(h.t.db, s.orderId)).toHaveLength(1);
+    expect(h.pp.captures.get(s.captureId)!.refundedMinor).toBe(10000);
+    expect(await refundedMinor(h.t.db, s.orderId)).toBe(10000n);
+  });
+
+  it('two concurrent refunds that both fit are both made, each under its own request id', async () => {
+    const s = await settled();
+    h.pp.delayMs = 60;
+    const results = await Promise.all([
+      refundCapture(h.ctx, s.orderId, { amountMinor: 5000n, reason: 'a', confirmedBy: OWNER }),
+      refundCapture(h.ctx, s.orderId, { amountMinor: 5000n, reason: 'b', confirmedBy: OWNER }),
+    ]);
+    expect(new Set(results.map((r) => r.refundId)).size).toBe(2);
+    const posts = refundPosts();
+    expect(posts).toHaveLength(2);
+    expect(new Set(posts.map((p) => p.headers['paypal-request-id'])).size).toBe(2);
+    expect(await refundedMinor(h.t.db, s.orderId)).toBe(10000n);
+    expect(await state(s.orderId)).toBe('SETTLED');
+  });
+
+  it('a burst of concurrent refunds on one order cannot exhaust the pool or deadlock', async () => {
+    const s = await settled();
+    const n = 20; // more waiters than the pool has connections (12)
+    const results = await Promise.allSettled(
+      Array.from({ length: n }, (_, i) => refundCapture(h.ctx, s.orderId, { amountMinor: 100n, reason: `r${i}`, confirmedBy: OWNER })),
+    );
+    expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
+    expect(await refundedMinor(h.t.db, s.orderId)).toBe(BigInt(n * 100));
+    expect(new Set(refundPosts().map((p) => p.headers['paypal-request-id'])).size).toBe(n);
+  });
+
+  it('refunds on different orders do not wait for each other', async () => {
+    const a = await settled();
+    const b = await settled();
+    h.pp.delayMs = 150;
+    const t0 = Date.now();
+    await Promise.all([
+      refundCapture(h.ctx, a.orderId, { reason: 'a', confirmedBy: OWNER }),
+      refundCapture(h.ctx, b.orderId, { reason: 'b', confirmedBy: OWNER }),
+    ]);
+    // Serialised they would take two PayPal round trips of 150ms each; in parallel, about one.
+    expect(Date.now() - t0).toBeLessThan(2 * 150 + 100);
   });
 });
 
@@ -208,5 +249,89 @@ describe('PENDING refunds', () => {
     h.pp.seen.length = 0;
     expect(await code(refundCapture(h.ctx, s.orderId, { reason: 'again', confirmedBy: OWNER }))).toBe('AMOUNT_MISMATCH');
     expect(refundPosts()).toHaveLength(0);
+  });
+});
+
+describe('reconciling PENDING refunds', () => {
+  async function pendingFull() {
+    const s = await settled();
+    h.pp.refundStatus = 'PENDING';
+    const r = await refundCapture(h.ctx, s.orderId, { reason: 'full refund', confirmedBy: OWNER });
+    h.pp.refundStatus = 'COMPLETED';
+    return { ...s, refundId: r.refundId };
+  }
+
+  it('a refund PayPal completes later moves the order to REFUNDED and is audited', async () => {
+    const s = await pendingFull();
+    h.pp.refunds.get(s.refundId)!.status = 'COMPLETED';
+    const out = await reconcileRefund(h.ctx, s.refundId);
+    expect(out).toMatchObject({ refundId: s.refundId, before: 'PENDING', after: 'COMPLETED', orderRefunded: true });
+    expect(await state(s.orderId)).toBe('REFUNDED');
+    expect((await listRefunds(h.t.db, s.orderId))[0]!.status).toBe('COMPLETED');
+    expect(await auditTypes(s.orderId)).toContain('REFUND_STATUS_CHANGED');
+    expect((await verifyChain(h.t.db)).ok).toBe(true);
+  });
+
+  it('a refund that FAILS stops counting, so the amount can be refunded again; the order stays SETTLED', async () => {
+    const s = await pendingFull();
+    h.pp.refunds.get(s.refundId)!.status = 'FAILED';
+    // PayPal's own ledger is what a re-refund would hit, so model the failed refund giving the money back there too.
+    h.pp.captures.get(s.captureId)!.refundedMinor = 0;
+    const out = await reconcileRefund(h.ctx, s.refundId);
+    expect(out).toMatchObject({ after: 'FAILED', orderRefunded: false });
+    expect(await state(s.orderId)).toBe('SETTLED');
+    expect(await refundedMinor(h.t.db, s.orderId)).toBe(0n);
+    const again = await refundCapture(h.ctx, s.orderId, { reason: 'try again', confirmedBy: OWNER });
+    expect(again).toMatchObject({ status: 'COMPLETED', fullyRefunded: true });
+    expect(await state(s.orderId)).toBe('REFUNDED');
+  });
+
+  it('a refund still PENDING at PayPal changes nothing and writes no REFUND_STATUS_CHANGED row (it runs on a poll)', async () => {
+    const s = await pendingFull();
+    h.pp.refunds.get(s.refundId)!.status = 'PENDING';
+    expect(await reconcileRefund(h.ctx, s.refundId)).toBeNull();
+    expect(await auditTypes(s.orderId)).not.toContain('REFUND_STATUS_CHANGED');
+    expect(await state(s.orderId)).toBe('SETTLED');
+  });
+
+  it('does not close the order while a different refund is still PENDING', async () => {
+    const s = await settled();
+    h.pp.refundStatus = 'PENDING';
+    const a = await refundCapture(h.ctx, s.orderId, { amountMinor: 7000n, reason: 'a', confirmedBy: OWNER });
+    const b = await refundCapture(h.ctx, s.orderId, { reason: 'rest', confirmedBy: OWNER });
+    h.pp.refunds.get(a.refundId)!.status = 'COMPLETED';
+    expect(await reconcileRefund(h.ctx, a.refundId)).toMatchObject({ after: 'COMPLETED', orderRefunded: false });
+    expect(await state(s.orderId)).toBe('SETTLED');
+    h.pp.refunds.get(b.refundId)!.status = 'COMPLETED';
+    expect(await reconcileRefund(h.ctx, b.refundId)).toMatchObject({ after: 'COMPLETED', orderRefunded: true });
+    expect(await state(s.orderId)).toBe('REFUNDED');
+  });
+
+  it('an already-settled refund is skipped without calling PayPal, and an unknown id is NOT_FOUND', async () => {
+    const s = await settled();
+    const r = await refundCapture(h.ctx, s.orderId, { amountMinor: 1000n, reason: 'x', confirmedBy: OWNER });
+    h.pp.seen.length = 0;
+    expect(await reconcileRefund(h.ctx, r.refundId)).toBeNull();
+    expect(h.pp.seen).toHaveLength(0);
+    expect(await code(reconcileRefund(h.ctx, 'REF-NOPE'))).toBe('NOT_FOUND');
+  });
+
+  it('refuses a status it does not know rather than guessing', async () => {
+    const s = await pendingFull();
+    h.pp.refunds.get(s.refundId)!.status = 'SOMETHING_NEW';
+    expect(await code(reconcileRefund(h.ctx, s.refundId))).toBe('PAYPAL_ERROR');
+    expect((await listRefunds(h.t.db, s.orderId))[0]!.status).toBe('PENDING');
+  });
+
+  it('a pass over all PENDING refunds settles what it can and reports what failed, without stopping', async () => {
+    const good = await pendingFull();
+    const bad = await pendingFull();
+    h.pp.refunds.get(good.refundId)!.status = 'COMPLETED';
+    h.pp.refunds.get(bad.refundId)!.status = 'SOMETHING_NEW';
+    const out = await reconcilePendingRefunds(h.ctx);
+    expect(out.changed.map((c) => c.refundId)).toContain(good.refundId);
+    expect(out.errors.map((e) => e.refundId)).toContain(bad.refundId);
+    expect(await state(good.orderId)).toBe('REFUNDED');
+    expect(await state(bad.orderId)).toBe('SETTLED');
   });
 });

@@ -157,6 +157,33 @@ describe('retry policy', () => {
     expect(rows[3].payload.willRetryInMs).toBeNull();
   });
 
+  it('retryAmbiguous:false: a 5xx and a network error are final on the first try (the request may have been processed)', async () => {
+    for (const failure of [apiError(503, { name: 'SERVICE_UNAVAILABLE', message: 'x' }), Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })]) {
+      const h = harness();
+      const s = scripted([failure]);
+      await expect(
+        paypalCall({ db: t.db, action: 'dispute_evidence', orderRowId: `${orderRowId}-${n++}`, run: s.run, deps: h.deps, retryAmbiguous: false }),
+      ).rejects.toMatchObject({ code: 'PAYPAL_ERROR' });
+      expect(s.calls()).toBe(1);
+      expect(h.sleeps).toEqual([]);
+    }
+  });
+
+  it('retryAmbiguous:false still retries what PayPal did NOT process: 429 backs off, 401 refreshes once', async () => {
+    const h = harness();
+    const s429 = scripted([apiError(429, { name: 'RATE_LIMIT_REACHED', message: 'slow' }), ok({ id: 'A' })]);
+    await paypalCall({ db: t.db, action: 'dispute_evidence', orderRowId: `${orderRowId}-429`, run: s429.run, deps: h.deps, retryAmbiguous: false });
+    expect(s429.calls()).toBe(2);
+    expect(h.sleeps).toEqual([RETRY_429_MS[0]]);
+
+    const h2 = harness();
+    let refreshed = 0;
+    const s401 = scripted([apiError(401, { name: 'AUTHENTICATION_FAILURE', message: 'expired' }), ok({ id: 'B' })]);
+    await paypalCall({ db: t.db, action: 'dispute_evidence', orderRowId: `${orderRowId}-401`, run: s401.run, deps: h2.deps, retryAmbiguous: false, onUnauthorized: () => void refreshed++ });
+    expect(s401.calls()).toBe(2);
+    expect(refreshed).toBe(1);
+  });
+
   it('429 backs off 10s then 30s, and a third 429 is final', async () => {
     const h = harness();
     const s = scripted([apiError(429, { name: 'RATE_LIMIT_REACHED', message: 'slow down' })]);

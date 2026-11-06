@@ -45,6 +45,23 @@ export async function insertRefund(
   return toRefund(res.rows[0]!);
 }
 
+export async function getRefundRow(db: Queryable, refundId: string): Promise<RefundRow | null> {
+  const r = await db.query<RefundDbRow>('select * from refund where refund_id = $1', [refundId]);
+  return r.rows[0] ? toRefund(r.rows[0]) : null;
+}
+
+/** Refunds PayPal has not settled yet. They count against the capture, so something must follow them to a final status. */
+export async function listPendingRefunds(db: Queryable): Promise<RefundRow[]> {
+  const r = await db.query<RefundDbRow>(`select * from refund where status = 'PENDING' order by created_at, refund_id`);
+  return r.rows.map(toRefund);
+}
+
+/** Moves a refund to the status PayPal now reports. Only a PENDING refund can still change, so a settled one is left alone. */
+export async function settleRefund(tx: Tx, refundId: string, status: RefundStatus): Promise<RefundRow | null> {
+  const r = await tx.query<RefundDbRow>(`update refund set status = $2 where refund_id = $1 and status = 'PENDING' returning *`, [refundId, status]);
+  return r.rows[0] ? toRefund(r.rows[0]) : null;
+}
+
 export async function listRefunds(db: Queryable, orderId: string): Promise<RefundRow[]> {
   const r = await db.query<RefundDbRow>('select * from refund where order_id = $1 order by created_at, refund_id', [orderId]);
   return r.rows.map(toRefund);

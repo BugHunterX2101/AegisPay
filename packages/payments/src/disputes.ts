@@ -1,6 +1,7 @@
 import type { OrderState } from '@aegis/core';
 import { DomainError, sha256Hex } from '@aegis/core';
 import {
+  acceptedEvidenceCall,
   appendAudit,
   findOrderIdByCaptureId,
   getDispute,
@@ -476,9 +477,11 @@ export interface SubmitResult {
  *   1. the bundle exists, is unsubmitted, was reviewed by a named human, and still matches its hash byte for byte;
  *   2. the order is DISPUTED;
  *   3. a fresh GET shows status WAITING_FOR_SELLER_RESPONSE, a provide-evidence link, and a response window still open.
- * The bundle row is locked for the whole call, so two submitters cannot both send it. If the commit after a successful
- * POST were to fail, the next attempt's fresh GET would no longer show the seller's turn and would refuse, so the
- * evidence is never sent twice by this code.
+ * The bundle row is locked for the whole call, so two submitters cannot both send it. The POST carries no
+ * PayPal-Request-Id and a 5xx or network error on it is NOT retried (the request may have been processed), so a failed
+ * submit is a visible error a person re-tries, never a silent duplicate. If PayPal accepted the POST but our commit then
+ * failed (crash window), the surviving ok:true audit row for this bundle lets the next attempt finish the bookkeeping
+ * without sending anything (EVIDENCE_SUBMIT_RECOVERED).
  */
 export async function submitEvidence(ctx: PayPalContext, bundleId: string, submittedBy: string): Promise<SubmitResult> {
   if (!submittedBy.trim()) throw new DomainError('FORBIDDEN', 'submitting evidence needs a named human');
@@ -496,6 +499,26 @@ export async function submitEvidence(ctx: PayPalContext, bundleId: string, submi
     const order = await getOrder(tx, dispute.orderId, { forUpdate: true });
     if (!order) throw new DomainError('NOT_FOUND', `Order ${dispute.orderId} not found`);
     if (order.state !== 'DISPUTED') throw new DomainError('BAD_STATE', `evidence can be submitted for a DISPUTED order, this one is ${order.state}`);
+
+    // Crash-window recovery. If PayPal already accepted THIS bundle (its ok:true call row survives in the audit log even
+    // when the transaction that should have recorded it did not commit), finish the local bookkeeping and send nothing:
+    // a second POST would either be refused by PayPal or, worse, duplicate the evidence.
+    const accepted = await acceptedEvidenceCall(tx, bundleId);
+    if (accepted) {
+      if (!(await markBundleSubmitted(tx, bundleId, null))) throw new DomainError('CONCURRENT_UPDATE', 'bundle was submitted by someone else');
+      const moved = await transition(tx, dispute.orderId, ['DISPUTED'], 'EVIDENCE_SUBMITTED');
+      if (moved === 'CONFLICT') throw new DomainError('CONCURRENT_UPDATE', 'order changed state while the submission was being recovered');
+      await appendAudit(tx, {
+        actor: `user:${submittedBy.trim()}`,
+        type: 'EVIDENCE_SUBMIT_RECOVERED',
+        entity: 'dispute',
+        entityId: b.disputeId,
+        ...(accepted.paypalRequestId ? { paypalRequestId: accepted.paypalRequestId } : {}),
+        ...(accepted.paypalDebugId ? { paypalDebugId: accepted.paypalDebugId } : {}),
+        payload: { bundleId, bundleSha256: b.sha256, orderId: dispute.orderId, acceptedAuditSeq: accepted.seq.toString(), note: 'PayPal had already accepted this bundle; nothing was re-sent' },
+      });
+      return { bundleId, disputeId: b.disputeId, orderId: dispute.orderId, paypalResponse: null };
+    }
 
     const live = await fetchDispute(ctx, b.disputeId);
     await upsertDispute(tx, {
@@ -525,7 +548,8 @@ export async function submitEvidence(ctx: PayPalContext, bundleId: string, submi
       path: `/v1/customer/disputes/${b.disputeId}/provide-evidence`,
       form,
       action: 'dispute_evidence',
-      subject: { type: 'dispute', id: b.disputeId },
+      // Filed under the bundle so that a surviving ok:true row says exactly which bundle PayPal accepted (see recovery above).
+      subject: { type: 'evidence_bundle', id: bundleId },
       write: true,
     });
 
