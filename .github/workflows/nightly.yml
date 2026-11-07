@@ -1,0 +1,28 @@
+name: nightly
+
+# Proves the hosted demo is still alive: live self-check (database, PayPal sandbox, webhook, Channel3), audit-chain
+# verification, and a sync of every open dispute. Set the repository variable APP_URL to the deployed API.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Nightly health run
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: pnpm nightly

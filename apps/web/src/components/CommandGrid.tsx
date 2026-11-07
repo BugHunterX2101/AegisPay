@@ -1,0 +1,212 @@
+import { useQuery } from '@tanstack/react-query';
+import { ModuleRegistry, colorSchemeVariable, themeQuartz } from 'ag-grid-community';
+import type { ColDef, GetRowIdParams } from 'ag-grid-community';
+import { AllEnterpriseModule, LicenseManager } from 'ag-grid-enterprise';
+import { AgGridReact } from 'ag-grid-react';
+import type { CustomCellRendererProps, CustomDetailCellRendererProps } from 'ag-grid-react';
+import { useMemo, useState } from 'react';
+import { api, errorMessage } from '../api.ts';
+import { endOfDay, money, remaining, shortHash, useAppNow } from '../format.ts';
+import { useStore } from '../store.ts';
+import type { AuditEvent, OrderRow } from '../types.ts';
+import { loadAll } from '../useStream.ts';
+import { ShipDialog, VoidDialog } from './Dialogs.tsx';
+import { StateChip } from './StateChip.tsx';
+
+// AG Grid Enterprise runs without a key (it shows a watermark); a key can be baked in at build time.
+const licenseKey = import.meta.env.VITE_AG_GRID_LICENSE_KEY as string | undefined;
+if (licenseKey) LicenseManager.setLicenseKey(licenseKey);
+ModuleRegistry.registerModules([AllEnterpriseModule]);
+
+const theme = themeQuartz.withPart(colorSchemeVariable);
+
+interface GridCtx {
+  approve: (o: OrderRow) => void;
+  ship: (o: OrderRow) => void;
+  voidHold: (o: OrderRow) => void;
+  evidence: (disputeId: string) => void;
+}
+
+const DISPUTE_STATES = new Set(['DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED']);
+
+function ActionsCell(p: CustomCellRendererProps<OrderRow>) {
+  const toast = useStore((s) => s.toast);
+  const [busy, setBusy] = useState(false);
+  const o = p.data;
+  if (!o) return null;
+  const ctx = p.context as GridCtx;
+
+  const post = async (path: string, ok: string) => {
+    setBusy(true);
+    try {
+      await api('POST', `/api/orders/${o.id}/${path}`, {});
+      toast('ok', ok);
+      await loadAll();
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="row-actions">
+      {o.state === 'AWAITING_APPROVAL' && (
+        <>
+          <button className="primary sm" onClick={() => ctx.approve(o)} data-testid="approve">Approve</button>
+          <button className="sm" disabled={busy} onClick={() => post('cancel', 'Order cancelled')} data-testid="cancel">Cancel</button>
+        </>
+      )}
+      {o.state === 'HELD' && <button className="sm" onClick={() => ctx.ship(o)} data-testid="ship">Ship</button>}
+      {o.state === 'IN_TRANSIT' && (
+        <button className="sm" disabled={busy} onClick={() => post('deliver', 'Delivery recorded: the proof gate is running')} data-testid="deliver">Delivered</button>
+      )}
+      {(o.state === 'HELD' || o.state === 'IN_TRANSIT') && (
+        <button className="danger sm" onClick={() => ctx.voidHold(o)} data-testid="void">Void</button>
+      )}
+      {DISPUTE_STATES.has(o.state) && o.disputeId && (
+        <button className="sm" onClick={() => ctx.evidence(o.disputeId!)} data-testid="evidence">Evidence</button>
+      )}
+    </div>
+  );
+}
+
+function SlaCell(p: CustomCellRendererProps<OrderRow>) {
+  const now = useAppNow();
+  const o = p.data;
+  if (!o || (o.state !== 'HELD' && o.state !== 'IN_TRANSIT')) return null;
+  const r = remaining(endOfDay(o.deliverBy), now);
+  if (!r) return null;
+  const auth = remaining(o.authExpiresAt, now);
+  return (
+    <span className={r.overdue ? 'overdue' : ''} title={auth ? `Authorization expires in ${auth.text}` : undefined} data-testid="sla">
+      {r.overdue ? 'SLA breached ' : 'SLA '}
+      {r.text}
+    </span>
+  );
+}
+
+function GateCell(p: CustomCellRendererProps<OrderRow>) {
+  const o = p.data;
+  if (!o || o.gatePass == null) return null;
+  return (
+    <span className={`gate ${o.gatePass ? 'pass' : 'fail'}`} title={`decision sha256 ${o.decisionSha256 ?? ''}`}>
+      {o.gatePass ? '✓ passed' : '✗ blocked'} <small>{shortHash(o.decisionSha256)}</small>
+    </span>
+  );
+}
+
+function AuditDetail(p: CustomDetailCellRendererProps<OrderRow>) {
+  const o = p.data;
+  const events = useQuery({
+    queryKey: ['audit', o?.id, o?.rowVersion],
+    queryFn: () => api<{ events: AuditEvent[] }>('GET', `/api/orders/${o!.id}/audit`),
+    enabled: !!o,
+  });
+  const chain = useQuery({
+    queryKey: ['verify', o?.rowVersion],
+    queryFn: () => api<{ ok: boolean; count?: number; firstBadSeq?: string; reason?: string }>('GET', '/api/audit/verify'),
+    enabled: !!o,
+  });
+  return (
+    <div className="detail" data-testid="audit-detail">
+      <div className="detail-head">
+        <strong>Audit trail</strong>
+        {chain.data && (
+          <span className={`gate ${chain.data.ok ? 'pass' : 'fail'}`} data-testid="chain-badge">
+            {chain.data.ok ? `✓ hash chain verified (${chain.data.count} rows)` : `✗ chain broken at ${chain.data.firstBadSeq}: ${chain.data.reason}`}
+          </span>
+        )}
+      </div>
+      {events.isLoading && <p className="muted">Loading…</p>}
+      {events.error && <p className="note">{errorMessage(events.error)}</p>}
+      <table>
+        <thead><tr><th>#</th><th>Time</th><th>Event</th><th>Actor</th><th>Hash</th></tr></thead>
+        <tbody>
+          {events.data?.events.map((e) => (
+            <tr key={e.seq}>
+              <td>{e.seq}</td>
+              <td>{new Date(e.ts).toLocaleString()}</td>
+              <td>{e.type}</td>
+              <td>{e.actor}</td>
+              <td title={e.hash}><code>{shortHash(e.hash)}</code></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function sumMinor(rows: OrderRow[], states: string[]): string {
+  const cur = rows[0]?.currency ?? 'USD';
+  const total = rows.filter((r) => states.includes(r.state)).reduce((a, r) => a + BigInt(r.amountMinor), 0n);
+  return money(total.toString(), cur);
+}
+
+export function CommandGrid(ctx: GridCtx) {
+  const ordersMap = useStore((s) => s.orders);
+  const rows = useMemo(
+    () => Object.values(ordersMap).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
+    [ordersMap],
+  );
+
+  const columnDefs = useMemo<ColDef<OrderRow>[]>(
+    () => [
+      {
+        headerName: 'Order',
+        field: 'title',
+        cellRenderer: 'agGroupCellRenderer',
+        cellRendererParams: { suppressCount: true },
+        valueFormatter: (p) => p.value ?? '(untitled)',
+        minWidth: 260,
+        flex: 2,
+      },
+      { headerName: 'State', field: 'state', cellRenderer: (p: CustomCellRendererProps<OrderRow>) => (p.data ? <StateChip state={p.data.state} /> : null), width: 160 },
+      { headerName: 'Hold', field: 'amountMinor', valueFormatter: (p) => (p.data ? money(p.data.amountMinor, p.data.currency) : ''), width: 110, type: 'rightAligned' },
+      { headerName: 'Supplier', field: 'domain', width: 160 },
+      { headerName: 'Gate', cellRenderer: GateCell, width: 170 },
+      { headerName: 'Deliver by', field: 'deliverBy', width: 120 },
+      { headerName: 'Timer', cellRenderer: SlaCell, width: 150, enableCellChangeFlash: false },
+      { headerName: 'Tracking', valueGetter: (p) => (p.data?.trackingNumber ? `${p.data.carrier ?? ''} ${p.data.trackingNumber}` : ''), width: 190 },
+      { headerName: 'PayPal order', field: 'paypalOrderId', width: 160 },
+      { headerName: 'Dispute', valueGetter: (p) => (p.data?.disputeId ? `${p.data.disputeId} · ${p.data.disputeStatus ?? ''}` : ''), width: 190 },
+      { headerName: '', cellRenderer: ActionsCell, width: 230, pinned: 'right', sortable: false, enableCellChangeFlash: false },
+    ],
+    [],
+  );
+
+  return (
+    <section aria-label="Command grid">
+      <div className="totals" data-testid="totals">
+        <span>On hold <strong>{sumMinor(rows, ['HELD', 'IN_TRANSIT', 'DELIVERED'])}</strong></span>
+        <span>Captured <strong>{sumMinor(rows, ['SETTLED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON'])}</strong></span>
+        <span>Voided <strong>{sumMinor(rows, ['VOIDED'])}</strong></span>
+        <span>{rows.length} order{rows.length === 1 ? '' : 's'}</span>
+      </div>
+      <div className="grid-wrap" data-testid="grid">
+        <AgGridReact<OrderRow>
+          theme={theme}
+          rowData={rows}
+          columnDefs={columnDefs}
+          defaultColDef={{ resizable: true, sortable: true, enableCellChangeFlash: true }}
+          getRowId={(p: GetRowIdParams<OrderRow>) => p.data.id}
+          context={ctx}
+          masterDetail
+          detailCellRenderer={AuditDetail}
+          detailRowHeight={280}
+          noRowsOverlayComponent={() => <span className="muted">No orders yet. Describe what you need above.</span>}
+        />
+      </div>
+    </section>
+  );
+}
+
+export function GridDialogs({ ship, voidFor, close }: { ship: OrderRow | null; voidFor: OrderRow | null; close: () => void }) {
+  return (
+    <>
+      {ship && <ShipDialog order={ship} onClose={close} />}
+      {voidFor && <VoidDialog order={voidFor} onClose={close} />}
+    </>
+  );
+}

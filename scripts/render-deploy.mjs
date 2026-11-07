@@ -74,7 +74,8 @@ const wanted = {
 };
 for (const [k, v] of Object.entries(wanted)) if (!v) throw new Error(`${k} is not set (.env)`);
 
-const buildCommand = 'corepack enable && pnpm install --frozen-lockfile --prod=false';
+// `pnpm build` writes the web app into apps/api/public, which the API serves as same-origin static files.
+const buildCommand = 'corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm build';
 const startCommand = 'pnpm --filter @aegis/worker start & pnpm --filter @aegis/api start & wait -n';
 
 let svc = (await render('GET', `/services?ownerId=${owner.id}&name=${NAMES.web}&limit=20`)).map((x) => x.service).find((s) => s.name === NAMES.web);

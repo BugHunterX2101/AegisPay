@@ -103,6 +103,15 @@ None of these can be settled without a buyer-approved transaction and a buyer-fi
 - **Where sourcing is persisted.** `POST /api/mandates/:id/source` searches Channel3 with the mandate's per-unit ceiling, shortlists, then in one transaction (under the mandate lock, against the mandate's *current* version and spent budget) stores a catalog snapshot, runs the deterministic gatekeeper, stores the proposal with its verdict, and writes a `PROPOSAL_GATED` audit row by `agent:sourcing`. Failing proposals are kept (with the rules they failed) rather than hidden. `POST /api/mandates/parse` returns a draft and saves nothing; the owner signs it through the ordinary create route. With no model or no catalog key both answer 503 `AGENT_UNAVAILABLE`.
 - **Tests use the real model when a key exists.** The API agent tests load the gitignored `.env`, use the hosted model if `ANTHROPIC_API_KEY` or `GROQ_API_KEY` is set, and fall back to the AI SDK's scripted mock only when there is no key at all (fresh clone, CI). Their catalog is a real Channel3 client with an injected HTTP response so the prices the gate judges are fixed; the live catalog is exercised in `packages/agents/test/channel3.sandbox.test.ts`.
 
+## 5d. Web app decisions that differ from, or go beyond, the TDD
+
+- **Master/detail instead of row grouping.** AG Grid cannot combine master/detail with row grouping. The audit trail per order (with a live hash-chain badge from `/api/audit/verify`) is the more useful half, so the grid is master/detail and is not grouped by mandate.
+- **AG Grid Enterprise runs without a licence key.** The key is read from the build-time variable `VITE_AG_GRID_LICENSE_KEY`; none is held, so the grid shows AG Grid's watermark. Everything works.
+- **One page, no client-side routes.** The API serves the built app as same-origin static files (`apps/api/public`), registered before the rate limiter so loading the page never spends a visitor's `/api` budget. There is deliberately no SPA fallback: an unknown path still gets the JSON 404.
+- **API-only without a build.** A web root without `index.html` (a fresh clone before `pnpm build`) leaves the API serving only JSON. The Render build command runs `pnpm build`.
+- **No sandbox buyer credentials are shown in Judge Mode.** None are held, so the banner says how to use PayPal's own sandbox buyer accounts instead of printing invented ones.
+- **The self-check dialog has no "cached" tag** on probes; it shows the latest result and its time.
+
 ## 6. What is needed from the owner
 
 1. A sandbox **buyer** login (or approve one order manually) so capture, refund and dispute flows can run against the real sandbox.

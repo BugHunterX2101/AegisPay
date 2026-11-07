@@ -3,6 +3,7 @@ import { OffsetClock, systemClock } from '@aegis/core';
 import { closePool, createPool, migrate, watchClockOffset } from '@aegis/db';
 import { createJobSender, ensureQueues } from '@aegis/jobs';
 import { createPayPalContext, loadPayPalConfig } from '@aegis/payments';
+import { fileURLToPath } from 'node:url';
 import { PgBoss } from 'pg-boss';
 import { buildApp } from './app.ts';
 
@@ -41,6 +42,7 @@ async function main(): Promise<void> {
     deps: { db, ctx, clock: demoClock, demoClock, jobs: createJobSender(boss), appUrl, model: modelFromEnv(), channel3: channel3FromEnv() },
     sessionSecret,
     secureCookies: appUrl.startsWith('https://'),
+    webRoot: fileURLToPath(new URL('../public', import.meta.url)), // the built web app; API-only if `pnpm build` has not run
     judgeMode: process.env.JUDGE_MODE !== 'false',
     paypalClientId: config.clientId, // public by design: the browser loads the PayPal SDK with it. Never the secret.
     logger: true,

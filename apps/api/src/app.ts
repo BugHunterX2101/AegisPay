@@ -1,7 +1,10 @@
+import fastifyStatic from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
 import { uuidv7 } from '@aegis/db';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ApiDeps } from './deps.ts';
 import { installErrorHandling } from './errors.ts';
 import { toJson } from './json.ts';
@@ -29,6 +32,11 @@ export interface BuildAppOptions {
   /** SSE heartbeat comment interval. */
   heartbeatMs?: number;
   logger?: boolean;
+  /**
+   * Directory holding the built web app (`pnpm build` writes apps/api/public). Absent, or a directory without an
+   * index.html, means API only: `index.ts` passes the real one, tests opt in explicitly.
+   */
+  webRoot?: string | null;
 }
 
 /**
@@ -46,6 +54,21 @@ export async function buildApp(o: BuildAppOptions): Promise<FastifyInstance> {
 
   app.setReplySerializer((payload) => toJson(payload)); // bigint -> decimal string, everywhere
   installErrorHandling(app);
+
+  // The web app is same-origin static files. It is registered BEFORE the rate limiter on purpose: the limiter only wraps
+  // routes added after it, so loading the page never spends a visitor's /api budget. Unknown paths still reach the
+  // JSON 404 above (the app is a single page, so there are no client-side routes to fall back for).
+  const webRoot = o.webRoot ?? null;
+  if (webRoot && existsSync(join(webRoot, 'index.html'))) {
+    await app.register(fastifyStatic, {
+      root: webRoot,
+      cacheControl: false,
+      setHeaders: (res, filePath) => {
+        // Vite fingerprints everything under /assets, so it can be cached for good; the page itself must always be fresh.
+        void res.header('cache-control', filePath.includes(`${join(webRoot, 'assets')}`) ? 'public, max-age=31536000, immutable' : 'no-cache');
+      },
+    });
+  }
 
   await app.register(rateLimit, { global: true, max: o.rateLimitMax ?? 60, timeWindow: '1 minute' });
   await installSession(app, {
