@@ -625,12 +625,14 @@ describe('GET /api/stream', () => {
     const frames = await readStream(
       base,
       { cookie: v.cookie },
-      (fs) => fs.some((f) => f.event === 'order.upsert'),
+      // The stream is shared by every open tab, so a late update from an earlier test's order can arrive first:
+      // wait for the upsert of the order this test placed, not merely the first upsert.
+      (fs) => orderId !== '' && fs.some((f) => f.event === 'order.upsert' && (JSON.parse(f.data!) as { id: string }).id === orderId),
       async () => {
         orderId = (await placed(v)).orderId;
       },
     );
-    const f = frames.find((x) => x.event === 'order.upsert')!;
+    const f = frames.find((x) => x.event === 'order.upsert' && (JSON.parse(x.data!) as { id: string }).id === orderId)!;
     expect(f.id).toMatch(/^\d+$/);
     const row = JSON.parse(f.data!) as { id: string; state: string; amountMinor: string };
     expect(row.id).toBe(orderId);
