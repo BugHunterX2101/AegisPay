@@ -66,10 +66,13 @@ export function MandateStrip({ onApprove }: { onApprove: (o: OrderRow) => void }
       <div className="strip-row">
         <input
           className="grow"
+          aria-label="What should the agent buy?"
+          name="mandate"
+          autoComplete="off"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && text.trim().length > 3 && !busy && parse()}
-          placeholder="What should the agent buy? e.g. one steel water bottle, at most $25, by the 20th"
+          placeholder="What should the agent buy? e.g. one steel water bottle, at most $25, by the 20th…"
           data-testid="mandate-text"
         />
         <button onClick={() => setText(EXAMPLE)}>Example</button>
@@ -81,19 +84,19 @@ export function MandateStrip({ onApprove }: { onApprove: (o: OrderRow) => void }
       {draft && (
         <div className="chips" data-testid="mandate-chips">
           <label>Keywords
-            <input value={draft.spec.keywords.join(', ')} onChange={(e) => set('spec', { ...draft.spec, keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })} />
+            <input name="keywords" autoComplete="off" value={draft.spec.keywords.join(', ')} onChange={(e) => set('spec', { ...draft.spec, keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })} />
           </label>
           <label>Quantity
-            <input type="number" min={1} value={draft.quantity} onChange={(e) => set('quantity', Math.max(1, Number(e.target.value) || 1))} />
+            <input name="quantity" autoComplete="off" type="number" min={1} value={draft.quantity} onChange={(e) => set('quantity', Math.max(1, Number(e.target.value) || 1))} />
           </label>
           <label>Ceiling per unit ({money(draft.unitCeiling, cur)})
-            <input value={draft.unitCeiling} onChange={(e) => set('unitCeiling', e.target.value.replace(/\D/g, ''))} inputMode="numeric" />
+            <input name="unitCeiling" autoComplete="off" spellCheck={false} value={draft.unitCeiling} onChange={(e) => set('unitCeiling', e.target.value.replace(/\D/g, ''))} inputMode="numeric" />
           </label>
           <label>Budget ({money(draft.budget, cur)})
-            <input value={draft.budget} onChange={(e) => set('budget', e.target.value.replace(/\D/g, ''))} inputMode="numeric" />
+            <input name="budget" autoComplete="off" spellCheck={false} value={draft.budget} onChange={(e) => set('budget', e.target.value.replace(/\D/g, ''))} inputMode="numeric" />
           </label>
           <label>Deliver by
-            <input type="date" value={draft.deliverBy} onChange={(e) => set('deliverBy', e.target.value)} />
+            <input name="deliverBy" autoComplete="off" type="date" value={draft.deliverBy} onChange={(e) => set('deliverBy', e.target.value)} />
           </label>
           <button className="primary" disabled={!!busy || !!mandateId} onClick={confirm} data-testid="mandate-confirm">
             {busy === 'confirm' ? 'Searching live catalog…' : mandateId ? 'Mandate signed' : 'Confirm and search'}
@@ -104,7 +107,7 @@ export function MandateStrip({ onApprove }: { onApprove: (o: OrderRow) => void }
 
       {proposals && proposals.length > 0 && (
         <table className="proposals" data-testid="proposals">
-          <thead><tr><th>Offer</th><th>Supplier</th><th>Unit</th><th>Gatekeeper</th><th /></tr></thead>
+          <thead><tr><th>Offer</th><th>Supplier</th><th>Unit</th><th>Gatekeeper</th><th><span className="sr-only">Action</span></th></tr></thead>
           <tbody>
             {proposals.map((p) => (
               <tr key={p.id} className={p.gatePass ? '' : 'blocked'}>

@@ -6,7 +6,7 @@ import { AgGridReact } from 'ag-grid-react';
 import type { CustomCellRendererProps, CustomDetailCellRendererProps } from 'ag-grid-react';
 import { useMemo, useState } from 'react';
 import { api, errorMessage } from '../api.ts';
-import { endOfDay, money, remaining, shortHash, useAppNow } from '../format.ts';
+import { CAPTURED_STATES, HELD_STATES, VOIDED_STATES, endOfDay, money, remaining, shortHash, sumMinor, useAppNow } from '../format.ts';
 import { useStore } from '../store.ts';
 import type { AuditEvent, OrderRow } from '../types.ts';
 import { loadAll } from '../useStream.ts';
@@ -18,7 +18,24 @@ const licenseKey = import.meta.env.VITE_AG_GRID_LICENSE_KEY as string | undefine
 if (licenseKey) LicenseManager.setLicenseKey(licenseKey);
 ModuleRegistry.registerModules([AllEnterpriseModule]);
 
-const theme = themeQuartz.withPart(colorSchemeVariable);
+// The grid wears the page's tokens; the CSS variables switch with the theme, so one param set serves both modes.
+const theme = themeQuartz.withPart(colorSchemeVariable).withParams({
+  backgroundColor: 'var(--card)',
+  foregroundColor: 'var(--foreground)',
+  chromeBackgroundColor: 'var(--card-2)',
+  headerBackgroundColor: 'var(--card-2)',
+  headerTextColor: 'var(--muted-foreground)',
+  borderColor: 'var(--border)',
+  accentColor: 'var(--primary)',
+  rowHoverColor: 'var(--tone-brass-bg)',
+  fontFamily: 'var(--font-ui)',
+  headerFontFamily: 'var(--font-ui)',
+  headerFontWeight: 600,
+  fontSize: 13,
+  borderRadius: 3,
+  wrapperBorderRadius: 3,
+  spacing: 7,
+});
 
 interface GridCtx {
   approve: (o: OrderRow) => void;
@@ -138,12 +155,6 @@ function AuditDetail(p: CustomDetailCellRendererProps<OrderRow>) {
   );
 }
 
-function sumMinor(rows: OrderRow[], states: string[]): string {
-  const cur = rows[0]?.currency ?? 'USD';
-  const total = rows.filter((r) => states.includes(r.state)).reduce((a, r) => a + BigInt(r.amountMinor), 0n);
-  return money(total.toString(), cur);
-}
-
 export function CommandGrid(ctx: GridCtx) {
   const ordersMap = useStore((s) => s.orders);
   const rows = useMemo(
@@ -179,9 +190,9 @@ export function CommandGrid(ctx: GridCtx) {
   return (
     <section aria-label="Command grid">
       <div className="totals" data-testid="totals">
-        <span>On hold <strong>{sumMinor(rows, ['HELD', 'IN_TRANSIT', 'DELIVERED'])}</strong></span>
-        <span>Captured <strong>{sumMinor(rows, ['SETTLED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON'])}</strong></span>
-        <span>Voided <strong>{sumMinor(rows, ['VOIDED'])}</strong></span>
+        <span>On hold <strong>{sumMinor(rows, HELD_STATES)}</strong></span>
+        <span>Captured <strong>{sumMinor(rows, CAPTURED_STATES)}</strong></span>
+        <span>Voided <strong>{sumMinor(rows, VOIDED_STATES)}</strong></span>
         <span>{rows.length} order{rows.length === 1 ? '' : 's'}</span>
       </div>
       <div className="grid-wrap" data-testid="grid">

@@ -1,10 +1,14 @@
+import { Monitor, Moon, Pulse, Sun } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { api, errorMessage } from '../api.ts';
 import { endOfDay } from '../format.ts';
 import { useStore } from '../store.ts';
+import { setThemePref, useTheme } from '../theme.ts';
+import type { ThemePref } from '../theme.ts';
 import type { SelfCheck } from '../types.ts';
 import { loadAll } from '../useStream.ts';
 import { Modal } from './Modal.tsx';
+import { Seal } from './Seal.tsx';
 
 const DAY_MS = 86_400_000;
 
@@ -34,7 +38,7 @@ function SelfCheckDot() {
 
   return (
     <>
-      <button className="pill" onClick={() => setOpen(true)} data-testid="selfcheck-dot" aria-label="Live self-check">
+      <button className="pill" onClick={() => setOpen(true)} data-testid="selfcheck-dot" aria-haspopup="dialog">
         <span className={`dot dot-${tone}`} /> Live check{sc ? (failing === 0 ? ': all pass' : `: ${failing} failing`) : ''}
       </button>
       {open && (
@@ -121,8 +125,20 @@ function AgentToggle() {
   const setDrawer = useStore((s) => s.setDrawer);
   const n = useStore((s) => s.feed.length);
   return (
-    <button className="pill" onClick={() => setDrawer(!open)} data-testid="drawer-toggle">
-      Agent activity <span className="count">{n}</span>
+    <button className="pill" onClick={() => setDrawer(!open)} aria-expanded={open} data-testid="drawer-toggle">
+      <Pulse size={15} aria-hidden="true" /> Agent activity <span className="count">{n}</span>
+    </button>
+  );
+}
+
+/** System, then light, then dark. The label names the next state, so the button is never ambiguous. */
+function ThemeToggle() {
+  const { pref } = useTheme();
+  const next: ThemePref = pref === 'system' ? 'light' : pref === 'light' ? 'dark' : 'system';
+  const Icon = pref === 'system' ? Monitor : pref === 'light' ? Sun : Moon;
+  return (
+    <button className="pill pill-icon" onClick={() => setThemePref(next)} aria-label={`Theme: ${pref}. Switch to ${next}.`} title={`Theme: ${pref}`}>
+      <Icon size={16} aria-hidden="true" />
     </button>
   );
 }
@@ -130,16 +146,25 @@ function AgentToggle() {
 export function TopBar() {
   const stream = useStore((s) => s.stream);
   return (
-    <header className="topbar">
-      <div className="brand">
-        <strong>AegisPay</strong>
-        <span className="muted">agents propose, humans approve, PayPal holds the money</span>
-      </div>
-      <div className="topbar-right">
-        <span className="tag" title="Money only ever moves in the PayPal sandbox">PayPal Sandbox</span>
-        <span className="pill" data-testid="stream-status"><span className={`dot dot-${stream === 'live' ? 'green' : 'amber'}`} /> {stream === 'live' ? 'Live' : stream}</span>
-        <SelfCheckDot />
-        <AgentToggle />
+    <header className="topbar" id="top">
+      <div className="wrap topbar-row">
+        <a className="brand" href="#top" aria-label="AegisPay, top of page">
+          <Seal size={26} />
+          <span className="wordmark" translate="no">AegisPay</span>
+        </a>
+        <nav className="topnav" aria-label="Sections">
+          <a href="#console">Console</a>
+          <a href="#lifecycle">How it works</a>
+        </nav>
+        <div className="topbar-right">
+          <span className="tag" title="Money only ever moves in the PayPal sandbox">PayPal Sandbox</span>
+          <span className="pill" data-testid="stream-status" role="status">
+            <span className={`dot dot-${stream === 'live' ? 'green' : 'amber'}`} /> {stream === 'live' ? 'Live' : stream}
+          </span>
+          <SelfCheckDot />
+          <AgentToggle />
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

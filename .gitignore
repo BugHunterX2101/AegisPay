@@ -18,3 +18,7 @@ graphify-out/.graphify_*
 .claude/
 *.tsbuildinfo
 PayPal AI Hackathon Strategy Report.docx
+
+# local agent skills (installed by npx skills)
+.agents/
+skills-lock.json

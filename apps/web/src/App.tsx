@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api, errorMessage, getSession } from './api.ts';
 import { AgentDrawer } from './components/AgentDrawer.tsx';
+import { Ambient } from './components/Ambient.tsx';
 import { CommandGrid, GridDialogs } from './components/CommandGrid.tsx';
 import { EvidenceModal } from './components/EvidenceModal.tsx';
+import { Footer } from './components/Footer.tsx';
+import { Hero } from './components/Hero.tsx';
+import { Lifecycle } from './components/Lifecycle.tsx';
 import { MandateStrip } from './components/MandateStrip.tsx';
 import { PayPalApproveDialog } from './components/PayPalApprove.tsx';
 import { JudgeBanner, TopBar, refreshSelfCheck } from './components/TopBar.tsx';
@@ -27,7 +31,7 @@ function Toasts() {
   return (
     <div className="toasts" aria-live="polite">
       {toasts.map((t) => (
-        <div key={t.id} className={`toast toast-${t.kind}`} role="status" onClick={() => dismiss(t.id)}>{t.text}</div>
+        <button key={t.id} type="button" className={`toast toast-${t.kind}`} onClick={() => dismiss(t.id)} aria-label={`${t.text}. Dismiss`}>{t.text}</button>
       ))}
     </div>
   );
@@ -63,12 +67,29 @@ export function App() {
   return (
     <>
       {session && <Stream />}
+      <Ambient />
+      <a className="skip" href="#console">Skip to the console</a>
       <TopBar />
-      <JudgeBanner />
-      <main>
-        <MandateStrip onApprove={setApprove} />
-        <CommandGrid approve={setApprove} ship={setShip} voidHold={setVoidFor} evidence={openEvidence} />
+      <main id="main">
+        <div className="wrap">
+          <Hero />
+        </div>
+        <section id="console" className="console" aria-labelledby="console-title" tabIndex={-1}>
+          <div className="wrap console-inner">
+            <header className="section-head">
+              <p className="eyebrow">02 · Console</p>
+              <h2 id="console-title" className="section-title">Run one purchase, end to end.</h2>
+            </header>
+            <JudgeBanner />
+            <MandateStrip onApprove={setApprove} />
+            <CommandGrid approve={setApprove} ship={setShip} voidHold={setVoidFor} evidence={openEvidence} />
+          </div>
+        </section>
+        <div className="wrap">
+          <Lifecycle />
+        </div>
       </main>
+      <Footer />
       <AgentDrawer />
       <GridDialogs ship={ship} voidFor={voidFor} close={close} />
       {approve && <PayPalApproveDialog order={approve} onClose={() => setApprove(null)} />}

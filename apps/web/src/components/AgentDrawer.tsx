@@ -1,3 +1,5 @@
+import { X } from '@phosphor-icons/react';
+import { useEffect } from 'react';
 import { useStore } from '../store.ts';
 import type { FeedItem } from '../types.ts';
 
@@ -21,12 +23,21 @@ export function AgentDrawer() {
   const open = useStore((s) => s.drawerOpen);
   const setDrawer = useStore((s) => s.setDrawer);
   const feed = useStore((s) => s.feed);
+
+  useEffect(() => {
+    if (!open) return;
+    // A modal opened over the drawer handles its own Escape first (it stops propagation).
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('[role="dialog"]') && setDrawer(false);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, setDrawer]);
+
   if (!open) return null;
   return (
-    <aside className="drawer" aria-label="Agent activity" data-testid="agent-drawer">
+    <aside className="drawer" aria-labelledby="drawer-title" data-testid="agent-drawer">
       <header>
-        <h2>Agent activity</h2>
-        <button className="icon" aria-label="Close" onClick={() => setDrawer(false)}>×</button>
+        <h2 id="drawer-title">Agent activity</h2>
+        <button className="icon" aria-label="Close agent activity" onClick={() => setDrawer(false)}><X size={18} aria-hidden="true" /></button>
       </header>
       {feed.length === 0 && <p className="muted">Nothing yet. Draft a mandate and the agent&apos;s steps appear here live.</p>}
       <ul>
@@ -34,7 +45,7 @@ export function AgentDrawer() {
           <li key={f.key} data-kind={f.kind}>
             <div className="feed-head">
               <span className={`kind kind-${f.kind.split('.')[0]}`}>{LABEL[f.kind]}</span>
-              <time>{new Date(f.at).toLocaleTimeString()}</time>
+              <time dateTime={new Date(f.at).toISOString()}>{new Date(f.at).toLocaleTimeString()}</time>
             </div>
             <div>{headline(f)}</div>
             <details>

@@ -33,12 +33,12 @@ export function ShipDialog({ order, onClose }: { order: OrderRow; onClose: () =>
     <Modal title="Record shipment" onClose={onClose}>
       <p className="muted">{order.title} · hold {money(order.amountMinor, order.currency)}</p>
       <label>Carrier
-        <select value={carrier} onChange={(e) => setCarrier(e.target.value as (typeof CARRIERS)[number])} data-testid="ship-carrier">
+        <select name="carrier" autoComplete="off" value={carrier} onChange={(e) => setCarrier(e.target.value as (typeof CARRIERS)[number])} data-testid="ship-carrier">
           {CARRIERS.map((c) => <option key={c}>{c}</option>)}
         </select>
       </label>
       <label>Tracking number
-        <input value={trackingNumber} onChange={(e) => setTracking(e.target.value)} placeholder="1Z999AA10123456784" data-testid="ship-tracking" />
+        <input name="trackingNumber" autoComplete="off" spellCheck={false} value={trackingNumber} onChange={(e) => setTracking(e.target.value)} placeholder="1Z999AA10123456784…" data-testid="ship-tracking" />
       </label>
       <div className="actions">
         <button onClick={onClose}>Cancel</button>

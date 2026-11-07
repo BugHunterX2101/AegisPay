@@ -1,0 +1,14 @@
+{
+  "4": "Web Package Manifest",
+  "5": "API Package Manifest",
+  "7": "Worker Package Manifest",
+  "8": "Agents Package Manifest",
+  "9": "Payments Package Manifest",
+  "12": "TypeScript Base Config",
+  "16": "DB Package Manifest",
+  "19": "Core Package Manifest",
+  "20": "Gatekeeper Package Manifest",
+  "26": "Workspace Overrides",
+  "29": "TS Project Config",
+  "32": "Postman Partner"
+}

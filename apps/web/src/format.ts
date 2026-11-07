@@ -68,3 +68,14 @@ export function remaining(toIso: string | null, now: number): { text: string; ov
 export const endOfDay = (ymd: string): string => `${ymd}T23:59:59.999Z`;
 
 export const shortHash = (h: string | null | undefined): string => (h ? `${h.slice(0, 8)}…` : '');
+
+/** The three money figures, shared by the hero and the grid totals so they can never disagree. */
+export const HELD_STATES: readonly OrderState[] = ['HELD', 'IN_TRANSIT', 'DELIVERED'];
+export const CAPTURED_STATES: readonly OrderState[] = ['SETTLED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON'];
+export const VOIDED_STATES: readonly OrderState[] = ['VOIDED'];
+
+/** Exact sum (BigInt, no float drift) of the orders in `states`, formatted in the first row's currency. */
+export function sumMinor(rows: ReadonlyArray<{ state: OrderState; amountMinor: string; currency: string }>, states: readonly OrderState[]): string {
+  const total = rows.filter((r) => states.includes(r.state)).reduce((a, r) => a + BigInt(r.amountMinor), 0n);
+  return money(total.toString(), rows[0]?.currency ?? 'USD');
+}
