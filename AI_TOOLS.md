@@ -10,7 +10,7 @@
 What the model is **not** allowed to do:
 
 - It never decides whether money moves. Every proposal goes through the deterministic gatekeeper (`packages/gatekeeper`), which contains no model call.
-- Its output is parsed against a schema and grounded against stored facts (`packages/agents/src/grounding.ts`) before anything uses it. Without a model key, the agent routes answer `503 AGENT_UNAVAILABLE` instead of inventing a result.
+- Its output is parsed against a schema and grounded against stored facts (`packages/agents/src/grounding.ts`) before anything uses it. Without a model key nothing is invented: the mandate-parse route answers `503 AGENT_UNAVAILABLE` (the form entry still works), and sourcing and dispute drafting fall back to deterministic paths (a price-ranked shortlist, template notes).
 - A drafted dispute response is only submitted after a person attests to it.
 
 Tests use the real hosted model whenever a key is present.
