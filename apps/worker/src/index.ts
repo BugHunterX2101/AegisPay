@@ -1,5 +1,5 @@
-import { systemClock } from '@aegis/core';
-import { closePool, createPool, migrate } from '@aegis/db';
+import { OffsetClock, systemClock } from '@aegis/core';
+import { closePool, createPool, migrate, watchClockOffset } from '@aegis/db';
 import { CertCache, createPayPalContext, loadPayPalConfig } from '@aegis/payments';
 import { createWorker, jsonLog } from './worker.ts';
 
@@ -21,10 +21,15 @@ async function main(): Promise<void> {
     jsonLog('warn', 'webhook.unverifiable', { reason: 'PAYPAL_WEBHOOK_ID is not set; stored events stay unverified and untouched' });
   }
 
+  // The worker's SLA timers follow the offset a judge sets through the API (shared via the database). PayPal's ctx and
+  // certificate cache stay on real time.
+  const demoClock = new OffsetClock(0);
+  const clockWatch = await watchClockOffset(db, demoClock, { onError: (e) => jsonLog('warn', 'clock.sync_failed', { message: e instanceof Error ? e.message : String(e) }) });
+
   const worker = await createWorker({
     connectionString,
     pipeline: { ctx, certs: new CertCache(systemClock), webhookId: config.webhookId },
-    clock: systemClock,
+    clock: demoClock,
   });
 
   let stopping = false;
@@ -33,6 +38,7 @@ async function main(): Promise<void> {
     stopping = true;
     jsonLog('info', 'worker.stopping', { signal });
     try {
+      clockWatch.stop();
       await worker.stop();
     } finally {
       await closePool();

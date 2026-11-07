@@ -1,6 +1,6 @@
 import { channel3FromEnv, modelFromEnv } from '@aegis/agents';
-import { systemClock } from '@aegis/core';
-import { closePool, createPool, migrate } from '@aegis/db';
+import { OffsetClock, systemClock } from '@aegis/core';
+import { closePool, createPool, migrate, watchClockOffset } from '@aegis/db';
 import { createJobSender, ensureQueues } from '@aegis/jobs';
 import { createPayPalContext, loadPayPalConfig } from '@aegis/payments';
 import { PgBoss } from 'pg-boss';
@@ -30,9 +30,15 @@ async function main(): Promise<void> {
   await boss.start();
   await ensureQueues(boss);
 
+  // Judge Mode's clock: the app's own "now" (SLA timers) can be moved, PayPal's (ctx stays on systemClock) never is.
+  const demoClock = new OffsetClock(0);
+  const clockWatch = await watchClockOffset(db, demoClock, {
+    onError: (e) => console.error(JSON.stringify({ level: 'warn', event: 'clock.sync_failed', message: e instanceof Error ? e.message : String(e) })),
+  });
+
   const app = await buildApp({
     // Both are null without their key: the agent routes then answer 503 AGENT_UNAVAILABLE instead of inventing results.
-    deps: { db, ctx, clock: systemClock, jobs: createJobSender(boss), appUrl, model: modelFromEnv(), channel3: channel3FromEnv() },
+    deps: { db, ctx, clock: demoClock, demoClock, jobs: createJobSender(boss), appUrl, model: modelFromEnv(), channel3: channel3FromEnv() },
     sessionSecret,
     secureCookies: appUrl.startsWith('https://'),
     judgeMode: process.env.JUDGE_MODE !== 'false',
@@ -46,6 +52,7 @@ async function main(): Promise<void> {
     stopping = true;
     app.log.info({ signal }, 'api stopping');
     try {
+      clockWatch.stop();
       await app.close();
       await boss.stop({ graceful: true, timeout: 10_000 });
     } finally {

@@ -1,5 +1,5 @@
 import type { Channel3Config, LanguageModel } from '@aegis/agents';
-import type { Clock } from '@aegis/core';
+import type { Clock, OffsetClock } from '@aegis/core';
 import type { Db } from '@aegis/db';
 import type { JobSender } from '@aegis/jobs';
 import type { PayPalContext } from '@aegis/payments';
@@ -17,6 +17,8 @@ export interface ApiDeps {
   model?: LanguageModel | null;
   /** The live catalog (Channel3), or null when no key is configured (sourcing then answers AGENT_UNAVAILABLE). */
   channel3?: Channel3Config | null;
+  /** The settable clock behind `clock`, present when the process runs one. Judge Mode's demo routes move it. */
+  demoClock?: OffsetClock;
 }
 
 export type Log = (level: 'info' | 'warn' | 'error', event: string, fields?: Record<string, unknown>) => void;

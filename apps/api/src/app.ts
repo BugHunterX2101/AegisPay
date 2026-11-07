@@ -7,10 +7,12 @@ import { installErrorHandling } from './errors.ts';
 import { toJson } from './json.ts';
 import { registerAgentRoutes } from './routes/agents.ts';
 import { registerAuditRoutes } from './routes/audit.ts';
+import { registerDemoRoutes } from './routes/demo.ts';
 import { registerDisputeRoutes } from './routes/disputes.ts';
 import { registerMandateRoutes } from './routes/mandates.ts';
 import { registerOrderRoutes } from './routes/orders.ts';
 import { registerWebhooks } from './routes/webhooks.ts';
+import { createSelfCheck } from './selfcheck.ts';
 import { installSession } from './session.ts';
 import { StreamHub, registerStream } from './stream.ts';
 
@@ -58,12 +60,18 @@ export async function buildApp(o: BuildAppOptions): Promise<FastifyInstance> {
     return { ok: true };
   });
 
+  // Live dependency proof. Public (no session) and cheap to call: probes are cached, and the route is rate limited hard.
+  const selfCheck = createSelfCheck(o.deps);
+  app.get('/api/selfcheck', { config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async () => selfCheck());
+  app.get('/selfcheck', { config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async () => selfCheck());
+
   registerWebhooks(app, o.deps);
   registerMandateRoutes(app, o.deps);
   registerAgentRoutes(app, o.deps);
   registerOrderRoutes(app, o.deps);
   registerDisputeRoutes(app, o.deps);
   registerAuditRoutes(app, o.deps);
+  registerDemoRoutes(app, o.deps, { judgeMode: o.judgeMode });
 
   const hub = new StreamHub(o.deps.db, (level, event, fields) => app.log[level]({ ...fields, event }));
   registerStream(app, { hub, heartbeatMs: o.heartbeatMs ?? 15_000 });
