@@ -118,6 +118,12 @@ None of these can be settled without a buyer-approved transaction and a buyer-fi
 - **The config is `eslint.boundaries.config.mjs`, passed with `eslint -c`.** A repository hook blocks edits to `eslint.config.*`, so the owner chose a separate filename. A style config can still live in `eslint.config.mjs` later without colliding.
 - **The rules are themselves tested.** `test/boundaries.test.ts` lints violating and allowed snippets through the real config (24 must be flagged, 10 must pass), so a rule that silently stops matching fails `pnpm test`.
 
+## 5f. Observed live: the sandbox dispute never opened the seller-response stage
+
+- **What happened.** A buyer-filed `MERCHANDISE_OR_SERVICE_NOT_RECEIVED` dispute (`PP-R-EVA-10196999`) arrived by a real, signature-verified `CUSTOMER.DISPUTE.CREATED` webhook and moved the order to `DISPUTED`. PayPal put it straight into `UNDER_REVIEW` / `CHARGEBACK` (channel `INTERNAL`) with no seller response due. The only action it offered was `provide_supporting_info`; it never offered `provide_evidence`.
+- **What the product did.** The evidence bundle was built from the audit log, a named human read it and attested to its hash (`EVIDENCE_REVIEWED`), and the submit step then re-read the dispute from PayPal and refused with 409 `BAD_STATE` (`UNDER_REVIEW`, not `WAITING_FOR_SELLER_RESPONSE`). Nothing was sent to PayPal. This is the designed behaviour: `provide-evidence` is only called when PayPal's live answer says the seller's turn is open and the link is offered.
+- **Decision.** Not to add a `provide-supporting-info` path. It is a different PayPal write with a different payload that the TDD does not specify, and the attestation covered the `provide-evidence` flow. The submission step therefore stays unproven against PayPal's sandbox; it is covered by the payments tests against a local PayPal-shaped server (`packages/payments/test/disputes.test.ts`).
+
 ## 6. What is needed from the owner
 
 1. A sandbox **buyer** login (or approve one order manually) so capture, refund and dispute flows can run against the real sandbox.
