@@ -1,7 +1,7 @@
 name: nightly
 
 # Proves the hosted demo is still alive: live self-check (database, PayPal sandbox, webhook, Channel3), audit-chain
-# verification, and a sync of every open dispute. Set the repository variable APP_URL to the deployed API.
+# verification, a sync of every open dispute, and the browser end-to-end tests. Set the repository variable APP_URL to the deployed API.
 on:
   schedule:
     - cron: '17 3 * * *'
@@ -13,7 +13,7 @@ permissions:
 jobs:
   nightly:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - run: corepack enable
@@ -26,3 +26,10 @@ jobs:
         env:
           APP_URL: ${{ vars.APP_URL }}
         run: pnpm nightly
+      - name: Browser end-to-end tests against the hosted demo
+        # Read-only against the demo: no PayPal hold is approved and the demo is never reset.
+        env:
+          E2E_BASE_URL: ${{ vars.APP_URL }}
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm e2e

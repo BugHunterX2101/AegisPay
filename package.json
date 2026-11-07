@@ -27,6 +27,7 @@
     "e2e": "playwright test -c e2e/playwright.config.ts"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
     "@vitest/coverage-v8": "^5.1.0",
