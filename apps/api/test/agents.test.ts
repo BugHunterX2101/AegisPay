@@ -248,3 +248,92 @@ describe('POST /api/mandates/:id/source', () => {
     expect(sent).toHaveLength(0); // it did not even search
   });
 });
+
+describe('GET /api/stream carries the agent and gate facts', () => {
+  interface Frame {
+    id?: string;
+    event?: string;
+    data?: string;
+    comment?: string;
+  }
+  const parseFrame = (raw: string): Frame => {
+    const f: Frame = {};
+    for (const line of raw.split('\n')) {
+      if (line.startsWith(': ')) f.comment = line.slice(2);
+      else if (line.startsWith('id: ')) f.id = line.slice(4);
+      else if (line.startsWith('event: ')) f.event = line.slice(7);
+      else if (line.startsWith('data: ')) f.data = line.slice(6);
+    }
+    return f;
+  };
+
+  /** A real SSE connection: frames are collected until `done` says enough; `onReady` runs once the server is live. */
+  async function readStream(base: string, cookie: string, done: (fs: Frame[]) => boolean, onReady: () => Promise<unknown>): Promise<Frame[]> {
+    const ac = new AbortController();
+    const res = await fetch(`${base}/api/stream`, { headers: { cookie }, signal: ac.signal });
+    expect(res.status).toBe(200);
+    const reader = res.body!.getReader();
+    const dec = new TextDecoder();
+    const frames: Frame[] = [];
+    let buf = '';
+    let fired: Promise<unknown> | undefined;
+    const end = Date.now() + 30_000;
+    try {
+      while (Date.now() < end) {
+        const { value, done: closed } = await reader.read();
+        if (closed) break;
+        buf += dec.decode(value, { stream: true });
+        for (let i = buf.indexOf('\n\n'); i >= 0; i = buf.indexOf('\n\n')) {
+          frames.push(parseFrame(buf.slice(0, i)));
+          buf = buf.slice(i + 2);
+        }
+        if (!fired && frames.some((f) => f.comment === 'ready')) fired = onReady();
+        if (fired && done(frames)) break;
+      }
+    } finally {
+      ac.abort();
+    }
+    await fired;
+    return frames;
+  }
+
+  it('streams agent.step, mandate.draft and gate.decision for a parse and a sourcing run, never a session id', async () => {
+    const base = await app.listen({ port: 0, host: '127.0.0.1' });
+    const r0 = await app.inject({ method: 'GET', url: '/api/session' });
+    const cookie = r0.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+    const { csrfToken, actor } = r0.json<{ csrfToken: string; actor: string }>();
+    const post = (url: string, body: unknown) => app.inject({ method: 'POST', url, headers: { cookie, 'x-csrf-token': csrfToken }, payload: body as object });
+
+    const frames = await readStream(
+      base,
+      cookie,
+      (fs) => fs.some((f) => f.event === 'mandate.draft') && fs.filter((f) => f.event === 'gate.decision').length >= 4 && fs.some((f) => f.event === 'agent.step' && f.data!.includes('"sourcing"')),
+      async () => {
+        const text = `Buy 12 steel water bottles, max $18.50 each, $200 total, by ${inDays(20)}, rating 4 or better.`;
+        const p = await post('/api/mandates/parse', { text });
+        expect(p.statusCode, p.body).toBe(200);
+        const m = await post('/api/mandates', { draft: draft() });
+        expect(m.statusCode, m.body).toBe(201);
+        const s = await post(`/api/mandates/${m.json<{ mandate: { id: string } }>().mandate.id}/source`, {});
+        expect(s.statusCode, s.body).toBe(201);
+      },
+    );
+
+    const of = (name: string) => frames.filter((f) => f.event === name).map((f) => ({ id: BigInt(f.id!), data: JSON.parse(f.data!) as Record<string, unknown> }));
+    const steps = of('agent.step');
+    expect(steps.some((s) => s.data.task === 'parser')).toBe(true);
+    expect(steps.some((s) => s.data.task === 'sourcing')).toBe(true);
+    const drafts = of('mandate.draft');
+    expect(drafts[0]!.data).toMatchObject({ runId: expect.any(String), draft: { quantity: 12 } });
+    expect(of('gate.decision').length).toBeGreaterThanOrEqual(4);
+    expect(of('gate.decision')[0]!.data).toMatchObject({ proposalId: expect.any(String), pass: expect.any(Boolean) });
+
+    // Facts are ordered, unique, and carry no session id: every open tab receives them.
+    const all = frames.filter((f) => f.id).map((f) => BigInt(f.id!));
+    expect(new Set(all).size).toBe(all.length);
+    expect([...all].sort((a, b) => (a < b ? -1 : 1))).toEqual(all);
+    const wire = frames.map((f) => f.data ?? '').join('\n');
+    expect(wire).not.toContain('requestedBy');
+    expect(wire).not.toContain(actor);
+  });
+});

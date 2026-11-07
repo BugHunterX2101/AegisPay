@@ -6,10 +6,38 @@ import type { ServerResponse } from 'node:http';
 import { toJson } from './json.ts';
 
 export interface SseMessage {
-  /** audit_event.seq of the newest audit row this message reflects: what a reconnecting client sends as Last-Event-ID. */
-  id: bigint;
+  /**
+   * audit_event.seq of the newest audit row this message reflects: what a reconnecting client sends as Last-Event-ID.
+   * `null` is an ephemeral event (a self-check result): it has no id and is never replayed.
+   */
+  id: bigint | null;
   event: SseEventName;
   data: unknown;
+}
+
+/** A message backed by an audit row, so it always has an id. */
+type AuditMessage = SseMessage & { id: bigint };
+
+/**
+ * Immutable facts that become one message each: a gate verdict, a verified webhook, an agent step, a mandate draft. Unlike
+ * an order they have no "current state" to re-read; the audit row is the record. `requestedBy` (a session id) is dropped:
+ * every open tab receives these, and one visitor's session must not be handed to another.
+ */
+function factMessage(r: AuditRow): AuditMessage | null {
+  const { requestedBy: _drop, ...p } = (r.payload ?? {}) as Record<string, unknown>;
+  const data = (key: string) => ({ [key]: r.entityId, at: r.ts, ...p });
+  switch (r.type) {
+    case 'PROPOSAL_GATED':
+      return { id: r.seq, event: 'gate.decision', data: data('proposalId') };
+    case 'WEBHOOK_VERIFIED':
+      return { id: r.seq, event: 'webhook.verified', data: data('eventId') };
+    case 'AGENT_STEP':
+      return { id: r.seq, event: 'agent.step', data: data('runId') };
+    case 'MANDATE_DRAFTED':
+      return { id: r.seq, event: 'mandate.draft', data: data('runId') };
+    default:
+      return null;
+  }
 }
 
 type Log = (level: 'info' | 'warn' | 'error', event: string, fields?: Record<string, unknown>) => void;
@@ -20,14 +48,16 @@ type Log = (level: 'info' | 'warn' | 'error', event: string, fields?: Record<str
  * the audit payload: several rows for one order in a batch collapse into one `order.upsert` with the latest row, which
  * is what a grid applying transactions wants.
  */
-export async function toMessages(db: Db, rows: readonly AuditRow[]): Promise<SseMessage[]> {
+export async function toMessages(db: Db, rows: readonly AuditRow[]): Promise<AuditMessage[]> {
   const latest = new Map<string, { kind: 'order' | 'dispute'; id: string; seq: bigint }>();
+  const out: AuditMessage[] = [];
   for (const r of rows) {
+    const fact = factMessage(r);
+    if (fact) out.push(fact);
     if (!r.entityId) continue;
     const kind = r.entity === 'purchase_order' ? 'order' : r.entity === 'dispute' ? 'dispute' : null;
     if (kind) latest.set(`${kind}:${r.entityId}`, { kind, id: r.entityId, seq: r.seq });
   }
-  const out: SseMessage[] = [];
   for (const l of latest.values()) {
     if (l.kind === 'order') {
       const row = await getOrderGridRow(db, l.id);
@@ -121,6 +151,11 @@ export class StreamHub {
     return () => void this.subs.delete(fn);
   }
 
+  /** Tell every open stream something that is not an audit row (a self-check result). No id: it is never replayed. */
+  publish(event: SseEventName, data: unknown): void {
+    for (const s of this.subs) s({ id: null, event, data });
+  }
+
   /** What a client missed: rows after `afterSeq`, capped. Past the cap the client is told to reload the grid. */
   async replay(afterSeq: bigint, cap = 500): Promise<{ messages: SseMessage[]; truncated: boolean }> {
     const rows = await listAuditAfter(this.db, afterSeq, cap + 1);
@@ -146,7 +181,7 @@ export class StreamHub {
   }
 }
 
-const frame = (m: SseMessage) => `id: ${m.id}\nevent: ${m.event}\ndata: ${toJson(m.data)}\n\n`;
+const frame = (m: SseMessage) => `${m.id === null ? '' : `id: ${m.id}\n`}event: ${m.event}\ndata: ${toJson(m.data)}\n\n`;
 
 const parseSeq = (v: unknown): bigint | null => (typeof v === 'string' && /^\d{1,18}$/.test(v) ? BigInt(v) : null);
 
@@ -180,8 +215,10 @@ export function registerStream(app: FastifyInstance, o: StreamRouteOptions): voi
     const pending: SseMessage[] = [];
     let sentUpTo = -1n;
     const send = (m: SseMessage) => {
-      if (m.id <= sentUpTo) return;
-      sentUpTo = m.id;
+      if (m.id !== null) {
+        if (m.id <= sentUpTo) return;
+        sentUpTo = m.id;
+      }
       res.write(frame(m));
     };
     const unsubscribe = o.hub.subscribe((m) => (live ? send(m) : pending.push(m)));

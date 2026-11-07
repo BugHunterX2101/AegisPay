@@ -48,7 +48,7 @@ async function timed(name: ProbeName, fn: () => Promise<Partial<Probe>>): Promis
  * no money can move), and the live Channel3 catalog. Results are cached so the public endpoint cannot be used to hammer
  * PayPal or burn catalog credits; concurrent callers share one in-flight run.
  */
-export function createSelfCheck(d: ApiDeps): () => Promise<SelfCheckResult> {
+export function createSelfCheck(d: ApiDeps, onResult?: (r: SelfCheckResult) => void): () => Promise<SelfCheckResult> {
   const slow = new Map<ProbeName, { at: number; probe: Probe }>();
   let last: { at: number; result: SelfCheckResult } | null = null;
   let inflight: Promise<SelfCheckResult> | null = null;
@@ -113,6 +113,7 @@ export function createSelfCheck(d: ApiDeps): () => Promise<SelfCheckResult> {
     inflight ??= run()
       .then((result) => {
         last = { at: Date.now(), result };
+        onResult?.(result); // a fresh run only, never a cache hit
         return result;
       })
       .finally(() => {

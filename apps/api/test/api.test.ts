@@ -645,6 +645,28 @@ describe('GET /api/stream', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it('pushes a fresh self-check result as an ephemeral event: no id, never replayed', async () => {
+    const v = await visitor();
+    const frames = await readStream(
+      base,
+      { cookie: v.cookie },
+      (fs) => fs.some((f) => f.event === 'selfcheck.result'),
+      async () => {
+        const r = await app.inject({ method: 'GET', url: '/api/selfcheck' });
+        expect(r.statusCode).toBe(200);
+      },
+    );
+    const f = frames.find((x) => x.event === 'selfcheck.result')!;
+    expect(f.id).toBeUndefined(); // an id would make a reconnecting client replay it
+    const body = JSON.parse(f.data!) as { probes: { name: string; ok: boolean }[]; checkedAt: string };
+    expect(body.probes.map((p) => p.name).sort()).toEqual(['channel3', 'db', 'order', 'token', 'webhook']);
+    expect(body.probes.find((p) => p.name === 'db')!.ok).toBe(true);
+
+    // A reconnect from the beginning does not resend it.
+    const again = await readStream(base, { cookie: v.cookie, 'last-event-id': '0' }, (fs) => fs.some((x) => x.comment === 'ready'));
+    expect(again.some((x) => x.event === 'selfcheck.result')).toBe(false);
+  });
+
   it('sends a heartbeat comment so an idle connection is not dropped by a proxy', async () => {
     const v = await visitor();
     const frames = await readStream(base, { cookie: v.cookie }, (fs) => fs.some((f) => f.comment === 'heartbeat'));

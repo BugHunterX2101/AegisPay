@@ -44,7 +44,19 @@ export async function verifyPendingWebhooks(p: WebhookPipeline, opts: { olderTha
   for (const ev of await listUnverifiedWebhooks(p.ctx.db, opts.olderThanMs ?? 0, opts.limit ?? 50)) {
     try {
       const v = await verifyWebhookEvent(p.ctx, { eventId: ev.eventId, raw: ev.rawBody, headers: ev.headers, webhookId: p.webhookId, certs: p.certs });
-      await markWebhookVerified(p.ctx.db, ev.eventId, v.method, v.ok ? undefined : v.reason);
+      // The verdict and its audit row commit together: the audit chain (and the live stream built on it) only ever
+      // shows a verification that is really stored.
+      await withTx(async (tx) => {
+        const changed = await markWebhookVerified(tx, ev.eventId, v.method, v.ok ? undefined : v.reason);
+        if (!changed) return;
+        await appendAudit(tx, {
+          actor: 'system:webhooks',
+          type: 'WEBHOOK_VERIFIED',
+          entity: 'webhook_event',
+          entityId: ev.eventId,
+          payload: { eventType: ev.eventType, method: v.method, ok: v.ok, ...(v.ok ? {} : { reason: v.reason }) },
+        });
+      }, p.ctx.db);
       if (v.ok) {
         pass.verified++;
       } else {

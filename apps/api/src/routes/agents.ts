@@ -2,6 +2,7 @@ import { buildQuery, parseMandateText, searchCatalog, shortlist } from '@aegis/a
 import { DomainError, ParseMandateBody } from '@aegis/core';
 import {
   appendAudit,
+  uuidv7,
   getCurrentMandate,
   getSupplierProfile,
   insertCatalogSnapshot,
@@ -37,7 +38,14 @@ export function registerAgentRoutes(app: FastifyInstance, d: ApiDeps): void {
     const body = ParseMandateBody.parse(req.body);
     if (!d.model) throw new DomainError('AGENT_UNAVAILABLE', 'No language model is configured (set ANTHROPIC_API_KEY or GROQ_API_KEY)');
     const r = await parseMandateText(body.text, { model: d.model, now: d.clock.now() });
-    return { draft: r.draft, warnings: r.warnings, step: r.step };
+    // The run is auditable even though no mandate is saved: what the parser did (its step, the structured draft it produced,
+    // a hash of its prompt) is recorded, never the raw text. The live stream shows these to every open tab.
+    const runId = uuidv7();
+    await withTx(async (tx) => {
+      await appendAudit(tx, { actor: 'agent:parser', type: 'AGENT_STEP', entity: 'agent_run', entityId: runId, payload: { ...r.step, requestedBy: req.actor } });
+      await appendAudit(tx, { actor: 'agent:parser', type: 'MANDATE_DRAFTED', entity: 'agent_run', entityId: runId, payload: { draft: r.draft, warnings: r.warnings, requestedBy: req.actor } });
+    }, d.db);
+    return { draft: r.draft, warnings: r.warnings, step: r.step, runId };
   });
 
   // Search the live catalog for the mandate, shortlist, gate each offer, and store every proposal with its verdict.
@@ -53,6 +61,7 @@ export function registerAgentRoutes(app: FastifyInstance, d: ApiDeps): void {
     if (!query) throw new DomainError('MANDATE_INVALID', 'The mandate has no keywords to search for');
 
     const now = d.clock.now();
+    const runId = uuidv7();
     const search = await searchCatalog(d.channel3, { query, maxPriceMinor: current.unitCeilingMinor, ...(body.limit === undefined ? {} : { limit: body.limit }), now });
     const list = await shortlist(search, { spec: current.spec, quantity: current.quantity, unitCeiling: current.unitCeilingMinor }, { model: d.model ?? null });
 
@@ -64,6 +73,11 @@ export function registerAgentRoutes(app: FastifyInstance, d: ApiDeps): void {
       if (m.status !== 'ACTIVE') throw new DomainError('MANDATE_NOT_ACTIVE', `Mandate ${id} is ${m.status}; only an active mandate can source`);
       const spent = await spentSoFar(tx, id);
       const gateMandate = toGateMandate(m);
+
+      // What the sourcing agent did, in order, before any proposal is gated: the stream shows the steps, then the verdicts.
+      for (const s of list.steps) {
+        await appendAudit(tx, { actor: 'agent:sourcing', type: 'AGENT_STEP', entity: 'agent_run', entityId: runId, payload: { ...s, mandateId: m.id, requestedBy: req.actor } });
+      }
 
       const out = [];
       for (const c of list.candidates) {
@@ -132,6 +146,7 @@ export function registerAgentRoutes(app: FastifyInstance, d: ApiDeps): void {
     }, d.db);
 
     return reply.code(201).send({
+      runId,
       query,
       proposals,
       steps: list.steps,

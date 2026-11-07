@@ -61,7 +61,8 @@ export async function buildApp(o: BuildAppOptions): Promise<FastifyInstance> {
   });
 
   // Live dependency proof. Public (no session) and cheap to call: probes are cached, and the route is rate limited hard.
-  const selfCheck = createSelfCheck(o.deps);
+  const hub = new StreamHub(o.deps.db, (level, event, fields) => app.log[level]({ ...fields, event }));
+  const selfCheck = createSelfCheck(o.deps, (r) => hub.publish('selfcheck.result', r));
   app.get('/api/selfcheck', { config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async () => selfCheck());
   app.get('/selfcheck', { config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async () => selfCheck());
 
@@ -73,7 +74,6 @@ export async function buildApp(o: BuildAppOptions): Promise<FastifyInstance> {
   registerAuditRoutes(app, o.deps);
   registerDemoRoutes(app, o.deps, { judgeMode: o.judgeMode });
 
-  const hub = new StreamHub(o.deps.db, (level, event, fields) => app.log[level]({ ...fields, event }));
   registerStream(app, { hub, heartbeatMs: o.heartbeatMs ?? 15_000 });
   app.addHook('onClose', async () => {
     await hub.stop();
