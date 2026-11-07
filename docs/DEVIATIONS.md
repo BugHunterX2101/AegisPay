@@ -106,11 +106,17 @@ None of these can be settled without a buyer-approved transaction and a buyer-fi
 ## 5d. Web app decisions that differ from, or go beyond, the TDD
 
 - **Master/detail instead of row grouping.** AG Grid cannot combine master/detail with row grouping. The audit trail per order (with a live hash-chain badge from `/api/audit/verify`) is the more useful half, so the grid is master/detail and is not grouped by mandate.
-- **AG Grid Enterprise runs without a licence key.** The key is read from the build-time variable `VITE_AG_GRID_LICENSE_KEY`; none is held, so the grid shows AG Grid's watermark. Everything works.
+- **AG Grid Enterprise has no production licence.** The key is read from the build-time variable `VITE_AG_GRID_LICENSE_KEY` and is never committed. Only an AG Grid evaluation key is available (evaluation use only, expires 7 December 2026); without a key the grid shows AG Grid's watermark. Everything works either way. A production deployment needs a purchased key.
 - **One page, no client-side routes.** The API serves the built app as same-origin static files (`apps/api/public`), registered before the rate limiter so loading the page never spends a visitor's `/api` budget. There is deliberately no SPA fallback: an unknown path still gets the JSON 404.
 - **API-only without a build.** A web root without `index.html` (a fresh clone before `pnpm build`) leaves the API serving only JSON. The Render build command runs `pnpm build`.
 - **No sandbox buyer credentials are shown in Judge Mode.** None are held, so the banner says how to use PayPal's own sandbox buyer accounts instead of printing invented ones.
 - **The self-check dialog has no "cached" tag** on probes; it shows the latest result and its time.
+
+## 5e. Tooling decisions
+
+- **Boundary lint uses ESLint core rules and the Babel parser, not `eslint-plugin-boundaries` or typescript-eslint.** TypeScript 7 no longer ships the JavaScript compiler API that typescript-eslint needs. `@babel/eslint-parser` (syntax plugins only, no transform) parses the TypeScript, and `no-restricted-imports` / `no-restricted-syntax` express the TDD dependency table, the no-clock rule for the gatekeeper and "PayPal POSTs only through payments". Static imports, `import type`, dynamic `import()` and `require()` are covered. `new Date(ms)` (formatting a passed-in value) is allowed in the gatekeeper; `Date.now()`, `new Date()` and `Date()` are not.
+- **The config is `eslint.boundaries.config.mjs`, passed with `eslint -c`.** A repository hook blocks edits to `eslint.config.*`, so the owner chose a separate filename. A style config can still live in `eslint.config.mjs` later without colliding.
+- **The rules are themselves tested.** `test/boundaries.test.ts` lints violating and allowed snippets through the real config (24 must be flagged, 10 must pass), so a rule that silently stops matching fails `pnpm test`.
 
 ## 6. What is needed from the owner
 

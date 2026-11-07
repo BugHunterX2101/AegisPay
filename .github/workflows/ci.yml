@@ -38,6 +38,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Typecheck
         run: pnpm typecheck
+      - name: Lint (architecture boundaries)
+        # Agents cannot import payments, the gatekeeper stays pure, the browser bundle imports no server code.
+        run: pnpm lint
       - name: Tests (the gatekeeper must keep 100% branch coverage)
         # No model key is set here, so the agent tests use the AI SDK's scripted model; the PayPal and Channel3 calls in
         # these tests go to local contract servers. The live checks are the sandbox suite and the nightly run.

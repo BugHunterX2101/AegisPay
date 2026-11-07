@@ -19,6 +19,8 @@ Built for the PayPal AI Hackathon 2026. Sandbox only: the server refuses to star
 | 4 | An SLA breach proposes a void of the hold. A human confirms it. | `apps/worker/src/jobs.ts`, `packages/payments/src/authorizations.ts` (`voidHold`) |
 | 5 | Disputes are answered with evidence drawn from a hash-chained audit log, attested by a human before submission. | `packages/payments/src/disputes.ts`, `packages/db/src/audit.ts` |
 
+"Agents cannot pay" is also a checked property of the code: `pnpm lint` (run in CI, rules in `eslint.boundaries.config.mjs`) fails the build if `packages/agents` imports `@aegis/payments` or the PayPal server SDK, if `packages/payments` imports agents, if the gatekeeper imports anything but core or reads a clock, or if anything outside payments names a PayPal API host. `test/boundaries.test.ts` proves each rule fires on a violating snippet.
+
 Every state change appends to an audit log whose rows are hash-chained, so tampering with history is detectable (`GET /api/audit/verify`, and the nightly job re-verifies the chain).
 
 ## PayPal APIs used
@@ -97,6 +99,7 @@ Useful commands:
 ```bash
 pnpm test                 # full suite (needs the local Postgres)
 pnpm typecheck
+pnpm lint                 # architecture boundaries (agents cannot import payments; the gatekeeper stays pure)
 pnpm selfcheck            # live dependency proof: database, PayPal, model, catalog
 pnpm seed                 # real mandates, live catalog, sandbox holds
 pnpm nightly              # self-check, audit-chain verify, open-dispute sync

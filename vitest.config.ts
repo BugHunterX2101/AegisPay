@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['packages/*/test/**/*.test.ts', 'apps/*/test/**/*.test.ts'],
+    include: ['packages/*/test/**/*.test.ts', 'apps/*/test/**/*.test.ts', 'test/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/*.sandbox.test.ts', '**/e2e/**'],
     testTimeout: 30_000,
     // Every file shares one Postgres. Each gets its own schema, but LISTEN/NOTIFY is per-database, so files running

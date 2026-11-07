@@ -70,6 +70,9 @@ const wanted = {
   GROQ_API_KEY: process.env.GROQ_API_KEY,
   CHANNEL3_API_KEY: process.env.CHANNEL3_API_KEY,
   ...(process.env.ANTHROPIC_API_KEY ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY } : {}),
+  // Optional. Vite bakes it into the web bundle at build time (it is a client-side licence key by design), so it must be
+  // present as a Render env var when `pnpm build` runs.
+  ...(process.env.VITE_AG_GRID_LICENSE_KEY ? { VITE_AG_GRID_LICENSE_KEY: process.env.VITE_AG_GRID_LICENSE_KEY } : {}),
   JUDGE_MODE: 'true',
 };
 for (const [k, v] of Object.entries(wanted)) if (!v) throw new Error(`${k} is not set (.env)`);
