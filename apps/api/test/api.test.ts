@@ -155,6 +155,15 @@ describe('session and CSRF', () => {
     expect(r.json()).toEqual({ ok: true });
   });
 
+  it('sends a buyer returning from PayPal back to the app instead of a 404', async () => {
+    const ok = await app.inject({ method: 'GET', url: '/approved?token=ABC&PayerID=XYZ' });
+    expect(ok.statusCode).toBe(302);
+    expect(ok.headers.location).toBe('/?paypal=approved');
+    const no = await app.inject({ method: 'GET', url: '/cancelled?token=ABC' });
+    expect(no.statusCode).toBe(302);
+    expect(no.headers.location).toBe('/?paypal=cancelled');
+  });
+
   it('answers with one error shape, a request id, and a generic message for an unknown route', async () => {
     const v = await visitor();
     const r = await v.get('/api/nope');

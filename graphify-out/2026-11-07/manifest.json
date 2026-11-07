@@ -18,9 +18,9 @@
     "semantic_hash": ""
   },
   "package.json": {
-    "mtime": 1794059968.8297052,
-    "seen": 1794060187.7407901,
-    "ast_hash": "698813479f6382e16718f01f52986bff",
+    "mtime": 1794060963.6008706,
+    "seen": 1794061367.9877477,
+    "ast_hash": "d19ab4adf0d8126943ec5dbdb483ed88",
     "semantic_hash": ""
   },
   "packages/agents/package.json": {
@@ -96,9 +96,9 @@
     "semantic_hash": "d169ee64903e47a89b6c378c3de4a3db"
   },
   "tsconfig.json": {
-    "mtime": 1793951112.1498828,
-    "seen": 1793951553.0526662,
-    "ast_hash": "83f18e253756ad0f5802d27caf8a6314",
+    "mtime": 1794061060.6984868,
+    "seen": 1794061367.987954,
+    "ast_hash": "875db654d018661ab86382d84c2e3174",
     "semantic_hash": ""
   },
   "docs/spec/AegisPay \u2014 Product Requirements Document.md": {
@@ -216,9 +216,9 @@
     "semantic_hash": ""
   },
   "vitest.config.ts": {
-    "mtime": 1793932856.1761997,
-    "seen": 1793933087.4641678,
-    "ast_hash": "bba56dd9e4585338f1df80575988b615",
+    "mtime": 1794061058.9765756,
+    "seen": 1794061367.9879556,
+    "ast_hash": "e9231f42237508dc1dde9f37e56f98a5",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -594,9 +594,9 @@
     "semantic_hash": ""
   },
   "docs/DEVIATIONS.md": {
-    "mtime": 1794059466.478141,
-    "seen": 1794059494.1555068,
-    "ast_hash": "889ae4c11bfb2e9e37ac57e6168e4971",
+    "mtime": 1794061342.3306763,
+    "seen": 1794061367.9879642,
+    "ast_hash": "e6439a841d12c8ba9fb2d8058fba84ff",
     "semantic_hash": ""
   },
   "packages/db/src/catalog.ts": {
@@ -912,9 +912,9 @@
     "semantic_hash": ""
   },
   "scripts/render-deploy.mjs": {
-    "mtime": 1794059425.416185,
-    "seen": 1794059494.1554208,
-    "ast_hash": "28ef531c2a2a8f60323ceff422802770",
+    "mtime": 1794060626.8694947,
+    "seen": 1794061367.9879463,
+    "ast_hash": "07cb975d3a899fcc3cf1598466b577ff",
     "semantic_hash": ""
   },
   "apps/api/src/routes/demo.ts": {
@@ -948,9 +948,9 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1794058194.0936384,
-    "seen": 1794059494.1548204,
-    "ast_hash": "f82c60a3536e5a278855910fdddce151",
+    "mtime": 1794061337.6747265,
+    "seen": 1794061367.987651,
+    "ast_hash": "af5581415955e2266f8879ec4d9a3d83",
     "semantic_hash": ""
   },
   ".github/workflows/nightly.yml": {
@@ -1128,15 +1128,27 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1794059898.490409,
-    "seen": 1794060187.7410305,
-    "ast_hash": "a1fa8cb081d9901be85969a879455658",
+    "mtime": 1794061340.9157617,
+    "seen": 1794061367.9879613,
+    "ast_hash": "1ddc257ad0a33ef52e3076e031360b4a",
+    "semantic_hash": ""
+  },
+  "eslint.boundaries.config.mjs": {
+    "mtime": 1794060988.418292,
+    "seen": 1794061367.9877458,
+    "ast_hash": "b84ca152cb6e8cfe283beed4c8092d09",
+    "semantic_hash": ""
+  },
+  "test/boundaries.test.ts": {
+    "mtime": 1794061048.3570487,
+    "seen": 1794061367.9879506,
+    "ast_hash": "b6f5e4e9e5afc6947fe2e401ec458b2b",
     "semantic_hash": ""
   },
   "pnpm-lock.yaml": {
-    "mtime": 1794059966.379136,
-    "seen": 1794060187.7410429,
-    "ast_hash": "51fcae5065031bc80f4eb9246ddf0f23",
+    "mtime": 1794060512.8524787,
+    "seen": 1794061367.9879723,
+    "ast_hash": "196379003cec5aff033955feb82aa9ea",
     "semantic_hash": ""
   }
 }

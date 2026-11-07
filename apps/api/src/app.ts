@@ -83,6 +83,11 @@ export async function buildApp(o: BuildAppOptions): Promise<FastifyInstance> {
     return { ok: true };
   });
 
+  // Where PayPal sends the buyer after a redirect-style approval (the order's return_url / cancel_url). The popup flow in
+  // the web app never lands here; a buyer who approves on paypal.com does. Send them back to the command center.
+  app.get('/approved', { config: { rateLimit: false } }, async (_req, reply) => reply.redirect('/?paypal=approved', 302));
+  app.get('/cancelled', { config: { rateLimit: false } }, async (_req, reply) => reply.redirect('/?paypal=cancelled', 302));
+
   // Live dependency proof. Public (no session) and cheap to call: probes are cached, and the route is rate limited hard.
   const hub = new StreamHub(o.deps.db, (level, event, fields) => app.log[level]({ ...fields, event }));
   const selfCheck = createSelfCheck(o.deps, (r) => hub.publish('selfcheck.result', r));
