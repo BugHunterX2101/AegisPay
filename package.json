@@ -22,7 +22,7 @@
     "test:sandbox": "vitest run --config vitest.sandbox.config.ts",
     "seed": "tsx scripts/seed.ts",
     "selfcheck": "tsx scripts/selfcheck.ts",
-    "register-webhook": "tsx scripts/register-webhook.ts",
+    "register-webhook": "node scripts/paypal-webhook.mjs",
     "nightly": "tsx scripts/nightly.ts",
     "e2e": "playwright test -c e2e/playwright.config.ts"
   },
