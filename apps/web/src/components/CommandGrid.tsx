@@ -4,7 +4,7 @@ import type { ColDef, GetRowIdParams } from 'ag-grid-community';
 import { AllEnterpriseModule, LicenseManager } from 'ag-grid-enterprise';
 import { AgGridReact } from 'ag-grid-react';
 import type { CustomCellRendererProps, CustomDetailCellRendererProps } from 'ag-grid-react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useSyncExternalStore } from 'react';
 import { api, errorMessage } from '../api.ts';
 import { CAPTURED_STATES, HELD_STATES, VOIDED_STATES, endOfDay, money, remaining, shortHash, sumMinor, useAppNow } from '../format.ts';
 import { useStore } from '../store.ts';
@@ -44,7 +44,15 @@ interface GridCtx {
   evidence: (disputeId: string) => void;
 }
 
-const DISPUTE_STATES = new Set(['DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED']);
+// On a phone a pinned 230px actions column would leave the order title ~120px; there it scrolls with the row instead.
+const NARROW = window.matchMedia('(max-width: 719px)');
+const subscribeNarrow = (cb: () => void) => {
+  NARROW.addEventListener('change', cb);
+  return () => NARROW.removeEventListener('change', cb);
+};
+const isNarrow = () => NARROW.matches;
+
+const DISPUTE_STATES =new Set(['DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED']);
 
 function ActionsCell(p: CustomCellRendererProps<OrderRow>) {
   const toast = useStore((s) => s.toast);
@@ -162,6 +170,7 @@ export function CommandGrid(ctx: GridCtx) {
     [ordersMap],
   );
 
+  const narrow = useSyncExternalStore(subscribeNarrow, isNarrow);
   const columnDefs = useMemo<ColDef<OrderRow>[]>(
     () => [
       {
@@ -173,18 +182,18 @@ export function CommandGrid(ctx: GridCtx) {
         minWidth: 260,
         flex: 2,
       },
-      { headerName: 'State', field: 'state', cellRenderer: (p: CustomCellRendererProps<OrderRow>) => (p.data ? <StateChip state={p.data.state} /> : null), width: 160 },
+      { headerName: 'State', field: 'state', cellRenderer: (p: CustomCellRendererProps<OrderRow>) => (p.data ? <StateChip state={p.data.state} /> : null), width: 200 },
       { headerName: 'Hold', field: 'amountMinor', valueFormatter: (p) => (p.data ? money(p.data.amountMinor, p.data.currency) : ''), width: 110, type: 'rightAligned' },
       { headerName: 'Supplier', field: 'domain', width: 160 },
       { headerName: 'Gate', cellRenderer: GateCell, width: 170 },
       { headerName: 'Deliver by', field: 'deliverBy', width: 120 },
-      { headerName: 'Timer', cellRenderer: SlaCell, width: 150, enableCellChangeFlash: false },
+      { headerName: 'Timer', cellRenderer: SlaCell, width: 220, enableCellChangeFlash: false },
       { headerName: 'Tracking', valueGetter: (p) => (p.data?.trackingNumber ? `${p.data.carrier ?? ''} ${p.data.trackingNumber}` : ''), width: 190 },
-      { headerName: 'PayPal order', field: 'paypalOrderId', width: 160 },
-      { headerName: 'Dispute', valueGetter: (p) => (p.data?.disputeId ? `${p.data.disputeId} · ${p.data.disputeStatus ?? ''}` : ''), width: 190 },
-      { headerName: '', cellRenderer: ActionsCell, width: 230, pinned: 'right', sortable: false, enableCellChangeFlash: false },
+      { headerName: 'PayPal order', field: 'paypalOrderId', width: 190 },
+      { headerName: 'Dispute', valueGetter: (p) => (p.data?.disputeId ? `${p.data.disputeId} · ${(p.data.disputeStatus ?? '').replaceAll('_', ' ').toLowerCase()}` : ''), width: 250 },
+      { headerName: '', cellRenderer: ActionsCell, width: 230, pinned: narrow ? null : 'right', sortable: false, enableCellChangeFlash: false },
     ],
-    [],
+    [narrow],
   );
 
   return (
@@ -200,7 +209,7 @@ export function CommandGrid(ctx: GridCtx) {
           theme={theme}
           rowData={rows}
           columnDefs={columnDefs}
-          defaultColDef={{ resizable: true, sortable: true, enableCellChangeFlash: true }}
+          defaultColDef={{ resizable: true, sortable: true, enableCellChangeFlash: true, suppressHeaderMenuButton: true }}
           getRowId={(p: GetRowIdParams<OrderRow>) => p.data.id}
           context={ctx}
           masterDetail
