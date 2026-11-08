@@ -6,7 +6,7 @@ import { AgGridReact } from 'ag-grid-react';
 import type { CustomCellRendererProps, CustomDetailCellRendererProps } from 'ag-grid-react';
 import { useMemo, useState, useSyncExternalStore } from 'react';
 import { api, errorMessage } from '../api.ts';
-import { CAPTURED_STATES, HELD_STATES, VOIDED_STATES, endOfDay, money, remaining, shortHash, sumMinor, useAppNow } from '../format.ts';
+import { CAPTURED_STATES, HELD_STATES, VOIDED_STATES, endOfDay, formatDay, formatStamp, humanize, money, remaining, shortHash, sumMinor, useAppNow } from '../format.ts';
 import { useStore } from '../store.ts';
 import type { AuditEvent, OrderRow } from '../types.ts';
 import { loadAll } from '../useStream.ts';
@@ -40,6 +40,7 @@ interface GridCtx {
   approve: (o: OrderRow) => void;
   ship: (o: OrderRow) => void;
   voidHold: (o: OrderRow) => void;
+  cancel: (o: OrderRow) => void;
   evidence: (disputeId: string) => void;
 }
 
@@ -51,7 +52,8 @@ const subscribeNarrow = (cb: () => void) => {
 };
 const isNarrow = () => NARROW.matches;
 
-const DISPUTE_STATES =new Set(['DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED']);
+const FIT_ROWS = 8;
+const DISPUTE_STATES = new Set(['DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED']);
 
 function ActionsCell(p: CustomCellRendererProps<OrderRow>) {
   const toast = useStore((s) => s.toast);
@@ -78,7 +80,7 @@ function ActionsCell(p: CustomCellRendererProps<OrderRow>) {
       {o.state === 'AWAITING_APPROVAL' && (
         <>
           <button className="primary sm" onClick={() => ctx.approve(o)} data-testid="approve">Approve</button>
-          <button className="sm" disabled={busy} onClick={() => post('cancel', 'Order cancelled')} data-testid="cancel">Cancel</button>
+          <button className="sm" onClick={() => ctx.cancel(o)} data-testid="cancel">Cancel</button>
         </>
       )}
       {o.state === 'HELD' && <button className="sm" onClick={() => ctx.ship(o)} data-testid="ship">Ship</button>}
@@ -138,7 +140,7 @@ function AuditDetail(p: CustomDetailCellRendererProps<OrderRow>) {
         <strong>Audit trail</strong>
         {chain.data && (
           <span className={`gate ${chain.data.ok ? 'pass' : 'fail'}`} data-testid="chain-badge">
-            {chain.data.ok ? `✓ hash chain verified (${chain.data.count} rows)` : `✗ chain broken at ${chain.data.firstBadSeq}: ${chain.data.reason}`}
+            {chain.data.ok ? `✓ hash chain verified (all ${chain.data.count} rows)` : `✗ chain broken at ${chain.data.firstBadSeq}: ${chain.data.reason}`}
           </span>
         )}
       </div>
@@ -150,7 +152,7 @@ function AuditDetail(p: CustomDetailCellRendererProps<OrderRow>) {
           {events.data?.events.map((e) => (
             <tr key={e.seq}>
               <td>{e.seq}</td>
-              <td>{new Date(e.ts).toLocaleString()}</td>
+              <td>{formatStamp(e.ts)}</td>
               <td>{e.type}</td>
               <td>{e.actor}</td>
               <td title={e.hash}><code>{shortHash(e.hash)}</code></td>
@@ -162,6 +164,9 @@ function AuditDetail(p: CustomDetailCellRendererProps<OrderRow>) {
   );
 }
 
+// A stable component: an inline arrow here would be a new component type on every render, remounting the overlay.
+const NoOrders = () => <span className="muted">No orders yet. Describe what you need above.</span>;
+
 export function CommandGrid(ctx: GridCtx) {
   const ordersMap = useStore((s) => s.orders);
   const rows = useMemo(
@@ -169,6 +174,8 @@ export function CommandGrid(ctx: GridCtx) {
     [ordersMap],
   );
 
+  // A short list is as tall as its rows, so there is no blank slab under it; a long one keeps a fixed, scrolling box.
+  const fit = rows.length > 0 && rows.length <= FIT_ROWS;
   const narrow = useSyncExternalStore(subscribeNarrow, isNarrow);
   const columnDefs = useMemo<ColDef<OrderRow>[]>(
     () => [
@@ -186,11 +193,11 @@ export function CommandGrid(ctx: GridCtx) {
       { headerName: 'Hold', field: 'amountMinor', valueFormatter: (p) => (p.data ? money(p.data.amountMinor, p.data.currency) : ''), width: 110, type: 'rightAligned' },
       { headerName: 'Supplier', field: 'domain', width: 160 },
       { headerName: 'Gate', cellRenderer: GateCell, width: 170 },
-      { headerName: 'Deliver by', field: 'deliverBy', width: 120 },
+      { headerName: 'Deliver by', field: 'deliverBy', valueFormatter: (p) => formatDay(p.value as string | null), width: 130 },
       { headerName: 'Timer', cellRenderer: SlaCell, width: 220, enableCellChangeFlash: false },
       { headerName: 'Tracking', valueGetter: (p) => (p.data?.trackingNumber ? `${p.data.carrier ?? ''} ${p.data.trackingNumber}` : ''), width: 190 },
       { headerName: 'PayPal order', field: 'paypalOrderId', width: 190 },
-      { headerName: 'Dispute', valueGetter: (p) => (p.data?.disputeId ? `${p.data.disputeId} · ${(p.data.disputeStatus ?? '').replaceAll('_', ' ').toLowerCase()}` : ''), width: 250 },
+      { headerName: 'Dispute', valueGetter: (p) => (p.data?.disputeId ? `${p.data.disputeId} · ${humanize(p.data.disputeStatus)}` : ''), width: 250 },
       { headerName: '', cellRenderer: ActionsCell, width: 230, pinned: narrow ? null : 'right', sortable: false, enableCellChangeFlash: false },
     ],
     [narrow],
@@ -204,8 +211,9 @@ export function CommandGrid(ctx: GridCtx) {
         <span>Voided <strong>{sumMinor(rows, VOIDED_STATES)}</strong></span>
         <span>{rows.length} order{rows.length === 1 ? '' : 's'}</span>
       </div>
-      <div className="grid-wrap" data-testid="grid">
+      <div className="grid-wrap" data-testid="grid" data-fit={fit ? 'rows' : 'scroll'}>
         <AgGridReact<OrderRow>
+          domLayout={fit ? 'autoHeight' : 'normal'}
           theme={theme}
           rowData={rows}
           columnDefs={columnDefs}
@@ -214,8 +222,8 @@ export function CommandGrid(ctx: GridCtx) {
           context={ctx}
           masterDetail
           detailCellRenderer={AuditDetail}
-          detailRowHeight={280}
-          noRowsOverlayComponent={() => <span className="muted">No orders yet. Describe what you need above.</span>}
+          detailRowAutoHeight
+          noRowsOverlayComponent={NoOrders}
         />
       </div>
     </section>

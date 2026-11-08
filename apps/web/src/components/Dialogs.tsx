@@ -7,6 +7,10 @@ import type { OrderRow } from '../types.ts';
 import { Modal } from './Modal.tsx';
 
 const CARRIERS = ['FEDEX', 'UPS', 'USPS', 'DHL', 'DHL_API', 'OTHER'] as const;
+/** What the API calls a carrier is not what a person reads. */
+const CARRIER_LABEL: Record<(typeof CARRIERS)[number], string> = {
+  FEDEX: 'FedEx', UPS: 'UPS', USPS: 'USPS', DHL: 'DHL', DHL_API: 'DHL (tracked through its API)', OTHER: 'Other carrier',
+};
 
 /** Record a shipment: the carrier and tracking number the supplier gave. The gatekeeper reads these before capture. */
 export function ShipDialog({ order, onClose }: { order: OrderRow; onClose: () => void }) {
@@ -34,7 +38,7 @@ export function ShipDialog({ order, onClose }: { order: OrderRow; onClose: () =>
       <p className="muted">{order.title} · hold {money(order.amountMinor, order.currency)}</p>
       <label>Carrier
         <select name="carrier" autoComplete="off" value={carrier} onChange={(e) => setCarrier(e.target.value as (typeof CARRIERS)[number])} data-testid="ship-carrier">
-          {CARRIERS.map((c) => <option key={c}>{c}</option>)}
+          {CARRIERS.map((c) => <option key={c} value={c}>{CARRIER_LABEL[c]}</option>)}
         </select>
       </label>
       <label>Tracking number
@@ -43,6 +47,39 @@ export function ShipDialog({ order, onClose }: { order: OrderRow; onClose: () =>
       <div className="actions">
         <button onClick={onClose}>Cancel</button>
         <button className="primary" disabled={busy || trackingNumber.trim().length < 3} onClick={submit} data-testid="ship-submit">Record shipment</button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Cancelling an order that is still awaiting approval: nothing was held, but the offer is gone and cannot be revived. */
+export function CancelDialog({ order, onClose }: { order: OrderRow; onClose: () => void }) {
+  const toast = useStore((s) => s.toast);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await api('POST', `/api/orders/${order.id}/cancel`, {});
+      toast('ok', 'Order cancelled');
+      await loadAll();
+      onClose();
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title="Cancel this order?" onClose={onClose}>
+      <p>
+        {order.title ?? 'This order'} ({money(order.amountMinor, order.currency)}) has not been approved, so no hold was placed and
+        nothing is charged. Cancelling closes the order; to buy it again you would draft the purchase again.
+      </p>
+      <div className="actions">
+        <button onClick={onClose}>Keep the order</button>
+        <button className="danger" disabled={busy} onClick={submit} data-testid="cancel-confirm">{busy ? 'Cancelling…' : 'Cancel the order'}</button>
       </div>
     </Modal>
   );

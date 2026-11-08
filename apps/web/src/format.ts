@@ -16,7 +16,29 @@ export const STATE_LABEL: Record<OrderState, string> = {
   DISPUTED: 'Disputed', EVIDENCE_SUBMITTED: 'Evidence submitted', RESOLVED_WON: 'Won', RESOLVED_LOST: 'Lost', REFUNDED: 'Refunded',
 };
 
-/** Colour families from the product spec: red blocks or fails, blue waits on a human, amber is money on hold, green settled. */
+/** `UNDER_REVIEW` to `Under review`: PayPal and the API speak in enum names; people should not have to. */
+export const humanize = (s: string | null | undefined): string => {
+  const t = (s ?? '').replaceAll('_', ' ').trim().toLowerCase();
+  return t ? t[0]!.toUpperCase() + t.slice(1) : '';
+};
+
+/** A `YYYY-MM-DD` deliver-by date as a readable date. Read as UTC, so the day never shifts with the viewer's timezone. */
+export const formatDay = (ymd: string | null | undefined): string => {
+  if (!ymd) return '';
+  const d = new Date(`${ymd}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? ymd : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+};
+
+/** A timestamp as `Nov 8, 2026, 12:58:54 AM`, in the viewer's timezone but one fixed language, like the money and dates. */
+export const formatStamp = (iso: string | number | Date): string =>
+  new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' });
+
+/** Just the time of day, for lines that sit under a date already (a drawer, a "checked at"). */
+export const formatClock = (iso: string | number | Date): string => new Date(iso).toLocaleTimeString('en-US', { timeStyle: 'medium' });
+
+export const formatBytes =(n: number): string => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+
+/** The tone families: red blocks or fails, blue waits on a human, amber is money on hold, green is verified, grey is closed. */
 export const STATE_TONE: Record<OrderState, 'red' | 'blue' | 'amber' | 'green' | 'grey'> = {
   GATED: 'blue', REJECTED: 'red', AWAITING_APPROVAL: 'blue', CANCELLED: 'grey', HELD: 'amber', IN_TRANSIT: 'amber',
   DELIVERED: 'green', SETTLED: 'green', FAILED: 'red', VOIDED: 'grey', DISPUTED: 'red', EVIDENCE_SUBMITTED: 'amber',

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, errorMessage } from '../api.ts';
+import { formatBytes, formatStamp, humanize } from '../format.ts';
 import { useStore } from '../store.ts';
 import type { Dispute } from '../types.ts';
 import { loadAll } from '../useStream.ts';
@@ -68,7 +69,7 @@ export function EvidenceModal({ disputeId, onClose }: { disputeId: string; onClo
   return (
     <Modal title={`Dispute ${disputeId}`} onClose={onClose} wide>
       {error && <p className="note">{error}</p>}
-      {detail && <p>Status <strong>{detail.dispute.status}</strong>{detail.dispute.reason ? ` · reason ${String(detail.dispute.reason)}` : ''}</p>}
+      {detail && <p>Status <strong>{humanize(detail.dispute.status)}</strong>{detail.dispute.reason ? ` · reason: ${humanize(String(detail.dispute.reason)).toLowerCase()}` : ''}</p>}
       <div className="actions left">
         <button disabled={!!busy} onClick={sync}>{busy === 'sync' ? 'Syncing…' : 'Sync from PayPal'}</button>
         <button disabled={!!busy || !!b?.submittedAt} onClick={plan} data-testid="plan">{busy === 'plan' ? 'Drafting…' : b ? 'Draft again' : 'Draft evidence'}</button>
@@ -89,12 +90,12 @@ export function EvidenceModal({ disputeId, onClose }: { disputeId: string; onClo
             {b.files.map((f) => (
               <li key={f.name}>
                 <a href={`/api/evidence/${b.id}/files/${encodeURIComponent(f.name)}`} target="_blank" rel="noreferrer">{f.name}</a>
-                <small className="muted"> {f.mime} · {f.bytes} bytes · {f.sha256.slice(0, 10)}…</small>
+                <small className="muted"> {f.mime} · {formatBytes(f.bytes)} · {f.sha256.slice(0, 10)}…</small>
               </li>
             ))}
           </ul>
           {b.submittedAt ? (
-            <p className="gate pass">✓ Submitted {new Date(b.submittedAt).toLocaleString()}</p>
+            <p className="gate pass">✓ Submitted {formatStamp(b.submittedAt)}</p>
           ) : (
             <>
               <label className="check">

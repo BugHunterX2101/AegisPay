@@ -290,7 +290,10 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
 .grow { flex: 1 1 320px; }
 .strip-row > .grow > input { min-height: 48px; font-size: 16px; }
 .strip-row > button { min-height: 48px; }
-.chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--s-3); align-items: end; }
+.chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--s-3); align-items: end; border: 0; padding: 0; margin: 0; min-width: 0; }
+.chips:disabled input { opacity: 0.7; }
+/* The gatekeeper's reason under a blocked offer: one line per failed rule. */
+.proposals .why { display: block; margin-top: var(--s-1); font-weight: 400; color: var(--muted-foreground); }
 
 .proposals, .detail table, .modal table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .proposals th, .detail th {
@@ -306,11 +309,13 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
   font-size: 13px; color: var(--muted-foreground); font-variant-numeric: tabular-nums;
 }
 .totals strong { color: var(--foreground); font-family: var(--font-mono); font-weight: 500; }
+.grid-wrap[data-fit='rows'] { height: auto; }
 .grid-wrap { height: 560px; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-1); }
 .grid-loading { display: grid; place-items: center; background: var(--card); color: var(--muted-foreground); font-size: 13px; }
 .row-actions { display: flex; align-items: center; gap: 6px; height: 100%; }
 [data-testid='sla'] { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
-.detail { height: 100%; overflow: auto; padding: var(--s-3) var(--s-4); background: var(--card); }
+/* No fixed height: the grid measures this panel (detailRowAutoHeight), and height:100% of an unmeasured row collapses it. */
+.detail { overflow-x: auto; padding: var(--s-3) var(--s-4); background: var(--card); }
 .detail-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); margin-bottom: var(--s-2); }
 
 /* ---------- lifecycle (plain list; the pinned mode below is opt-in from JS) ---------- */

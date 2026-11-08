@@ -1,7 +1,7 @@
 import { Monitor, Moon, Pulse, Sun } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { api, errorMessage } from '../api.ts';
-import { endOfDay } from '../format.ts';
+import { endOfDay, formatClock } from '../format.ts';
 import { useStore } from '../store.ts';
 import { setThemePref, useTheme } from '../theme.ts';
 import type { ThemePref } from '../theme.ts';
@@ -39,7 +39,7 @@ function SelfCheckDot() {
   return (
     <>
       <button className="pill" onClick={() => setOpen(true)} data-testid="selfcheck-dot" aria-haspopup="dialog">
-        <span className={`dot dot-${tone}`} /> Live check{sc ? (failing === 0 ? ': all pass' : `: ${failing} failing`) : ''}
+        <span className={`dot dot-${tone}`} aria-hidden="true" /> Live check{sc ? (failing === 0 ? ': all pass' : `: ${failing} failing`) : ''}
       </button>
       {open && (
         <Modal title="Live self-check" onClose={() => setOpen(false)}>
@@ -48,7 +48,7 @@ function SelfCheckDot() {
             <tbody>
               {sc?.probes.map((p) => (
                 <tr key={p.name} data-testid={`probe-${p.name}`}>
-                  <td><span className={`dot dot-${p.ok ? 'green' : 'red'}`} /> {p.name}</td>
+                  <td><span className={`dot dot-${p.ok ? 'green' : 'red'}`} aria-hidden="true" /><span className="sr-only">{p.ok ? 'Passing: ' : 'Failing: '}</span> {p.name}</td>
                   <td>{p.ms} ms</td>
                   <td className="muted">{p.detail}{p.debugId ? ` · paypal-debug-id ${p.debugId}` : ''}</td>
                 </tr>
@@ -56,7 +56,7 @@ function SelfCheckDot() {
             </tbody>
           </table>
           <div className="actions">
-            {sc && <small className="muted">checked {new Date(sc.checkedAt).toLocaleTimeString()}</small>}
+            {sc && <small className="muted">checked {formatClock(sc.checkedAt)}</small>}
             <button disabled={busy} onClick={rerun}>{busy ? 'Running…' : 'Run again'}</button>
           </div>
         </Modal>
@@ -93,13 +93,14 @@ function JudgePanel() {
     return setClock(Math.floor((earliest - Date.now()) / DAY_MS) + 1);
   };
 
+  const [confirmReset, setConfirmReset] = useState(false);
   const reset = async () => {
-    if (!window.confirm('Clear all demo orders, mandates and disputes? The audit chain is kept.')) return;
     setBusy(true);
     try {
       await api('POST', '/api/demo/reset', {});
       setOffsetDays(0);
       await loadAll();
+      setConfirmReset(false);
       toast('ok', 'Demo cleared; the audit chain was kept');
     } catch (e) {
       toast('error', errorMessage(e));
@@ -115,7 +116,16 @@ function JudgePanel() {
       <button className="sm" disabled={busy || offsetDays >= 60} onClick={() => setClock(offsetDays + 1)} data-testid="clock-plus1">+1 day</button>
       <button className="sm" disabled={busy} onClick={pastSla} data-testid="clock-sla">+SLA</button>
       <button className="sm" disabled={busy || offsetDays === 0} onClick={() => setClock(0)}>Real time</button>
-      <button className="sm danger" disabled={busy} onClick={reset} data-testid="reset-demo">Reset demo</button>
+      <button className="sm danger" disabled={busy} onClick={() => setConfirmReset(true)} data-testid="reset-demo">Reset demo</button>
+      {confirmReset && (
+        <Modal title="Reset the demo?" onClose={() => setConfirmReset(false)}>
+          <p>This clears every demo order, mandate and dispute. The audit chain is kept, so what happened stays provable.</p>
+          <div className="actions">
+            <button onClick={() => setConfirmReset(false)}>Keep the demo</button>
+            <button className="danger" disabled={busy} onClick={reset} data-testid="reset-confirm">{busy ? 'Clearing…' : 'Reset the demo'}</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -154,12 +164,12 @@ export function TopBar() {
         </a>
         <nav className="topnav" aria-label="Sections">
           <a href="#console">Console</a>
-          <a href="#lifecycle">How it works</a>
+          <a href="#lifecycle">How a hold moves</a>
         </nav>
         <div className="topbar-right">
           <span className="tag" title="Money only ever moves in the PayPal sandbox">PayPal Sandbox</span>
           <span className="pill" data-testid="stream-status" role="status">
-            <span className={`dot dot-${stream === 'live' ? 'green' : 'amber'}`} /> {stream === 'live' ? 'Live' : stream}
+            <span className={`dot dot-${stream === 'live' ? 'green' : 'amber'}`} aria-hidden="true" /> {stream === 'live' ? 'Live' : stream === 'reconnecting' ? 'Reconnecting…' : 'Connecting…'}
           </span>
           <SelfCheckDot />
           <AgentToggle />

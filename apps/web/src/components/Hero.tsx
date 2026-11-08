@@ -161,14 +161,14 @@ export function Hero() {
     <section className="hero" ref={root} aria-labelledby="hero-title">
       <canvas ref={plateCanvas} className="hero-plate" aria-hidden="true" />
       <div className="hero-copy">
-        <p className="eyebrow" data-enter="fade">Spend control for AI purchasing agents <span aria-hidden="true">·</span> PayPal sandbox</p>
+        <p className="eyebrow" data-enter="fade">01 · Spend control for AI purchasing agents</p>
         <h1 id="hero-title" className="hero-title">
           <span className="line"><span data-enter="line">Give agents the buying.</span></span>
           <span className="line"><em data-enter="line">Keep the wallet.</em></span>
         </h1>
         <p className="lede" data-enter="fade">
           Agents find the offer. A deterministic gatekeeper checks it against your mandate. You approve a PayPal hold, and it
-          is captured only after delivery is proven. Miss the deadline and the hold is voided.
+          is captured only after delivery is proven. Miss the deadline and a person voids the hold.
         </p>
         <div className="hero-actions" data-enter="fade">
           <button className="primary lg" onClick={toConsole}>Draft a mandate</button>

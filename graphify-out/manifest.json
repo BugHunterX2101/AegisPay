@@ -966,45 +966,45 @@
     "semantic_hash": ""
   },
   "apps/web/src/App.tsx": {
-    "mtime": 1794116271.009486,
-    "seen": 1794116591.3226063,
-    "ast_hash": "21dd79ce6b1e32e6cc907bc6d8527364",
+    "mtime": 1794117688.4198165,
+    "seen": 1794118283.2354987,
+    "ast_hash": "bdb3ea4d31167deba144c98106bee99c",
     "semantic_hash": ""
   },
   "apps/web/src/api.ts": {
-    "mtime": 1794058649.5248353,
-    "seen": 1794059494.1549244,
-    "ast_hash": "781e54adc0d3bdc09f60ee00d77ea724",
+    "mtime": 1794117579.561004,
+    "seen": 1794118283.2355008,
+    "ast_hash": "ab76d9031471992e7f7bd387d9a95028",
     "semantic_hash": ""
   },
   "apps/web/src/components/AgentDrawer.tsx": {
-    "mtime": 1794116301.0504596,
-    "seen": 1794116591.3226142,
-    "ast_hash": "83c4a7b4a4a552faad1b6d626f88dc41",
+    "mtime": 1794117958.3615527,
+    "seen": 1794118283.235503,
+    "ast_hash": "a2d7c383169f53c5ccee6201bdfafb60",
     "semantic_hash": ""
   },
   "apps/web/src/components/CommandGrid.tsx": {
-    "mtime": 1794116242.7899365,
-    "seen": 1794116591.3226225,
-    "ast_hash": "61997b0ec5d5480827b53c36632a6ea3",
+    "mtime": 1794117963.0939968,
+    "seen": 1794118283.2355068,
+    "ast_hash": "915896e335ea7218edd1c6d0f8ca7cc1",
     "semantic_hash": ""
   },
   "apps/web/src/components/Dialogs.tsx": {
-    "mtime": 1794116280.3851233,
-    "seen": 1794116591.3226266,
-    "ast_hash": "5faadd4104c590a775c85e67553233b2",
+    "mtime": 1794117674.4809425,
+    "seen": 1794118283.2355082,
+    "ast_hash": "6e5ad88637b6cca32a9261e8067b7e8c",
     "semantic_hash": ""
   },
   "apps/web/src/components/EvidenceModal.tsx": {
-    "mtime": 1794116283.0823483,
-    "seen": 1794116591.3226295,
-    "ast_hash": "3b8ce17a56f777c37b872b997f9e03f6",
+    "mtime": 1794117966.3908362,
+    "seen": 1794118283.2355099,
+    "ast_hash": "5184c9d35c9b4e62888d30b98cb3d19e",
     "semantic_hash": ""
   },
   "apps/web/src/components/MandateStrip.tsx": {
-    "mtime": 1794116252.5426135,
-    "seen": 1794116591.3226397,
-    "ast_hash": "bf32bbe4eaac6553d93009a67801436c",
+    "mtime": 1794117751.2952428,
+    "seen": 1794118283.2355158,
+    "ast_hash": "b4d3a7d5a2a144e878009fd7cf466420",
     "semantic_hash": ""
   },
   "apps/web/src/components/Modal.tsx": {
@@ -1014,9 +1014,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/PayPalApprove.tsx": {
-    "mtime": 1794116285.7138314,
-    "seen": 1794116591.322645,
-    "ast_hash": "bd0c2b69a730a7909d5e82d8448fb397",
+    "mtime": 1794117697.6538048,
+    "seen": 1794118283.235519,
+    "ast_hash": "cdfcc6fdd4e3ba13c1b1f3f6b8346dd2",
     "semantic_hash": ""
   },
   "apps/web/src/components/StateChip.tsx": {
@@ -1026,15 +1026,15 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/TopBar.tsx": {
-    "mtime": 1794079018.3247316,
-    "seen": 1794079248.8214333,
-    "ast_hash": "28d6a1a31c007a44d67a08590f507d13",
+    "mtime": 1794117969.8663936,
+    "seen": 1794118283.2355242,
+    "ast_hash": "8a57a92a78e3346757942d7c56cf027b",
     "semantic_hash": ""
   },
   "apps/web/src/format.ts": {
-    "mtime": 1794074846.3450108,
-    "seen": 1794079248.8214364,
-    "ast_hash": "d2c38e00d481ae2b6bb3901bf3837d26",
+    "mtime": 1794117947.036075,
+    "seen": 1794118283.2355254,
+    "ast_hash": "4d62ac6af2936498e784e6808c008c7b",
     "semantic_hash": ""
   },
   "apps/web/src/main.tsx": {
@@ -1050,9 +1050,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/types.ts": {
-    "mtime": 1794058647.3571754,
-    "seen": 1794059494.154965,
-    "ast_hash": "82931c154923ae333ef3c055b8f065d0",
+    "mtime": 1794117729.5676892,
+    "seen": 1794118283.2355382,
+    "ast_hash": "a633808984d5055c1dd6243d9a1e6061",
     "semantic_hash": ""
   },
   "apps/web/src/useStream.ts": {
@@ -1104,9 +1104,9 @@
     "semantic_hash": ""
   },
   "apps/web/index.html": {
-    "mtime": 1794075384.016726,
-    "seen": 1794079248.8220243,
-    "ast_hash": "d1c1889354ce1c5e7b43d73f91aa96e1",
+    "mtime": 1794117773.6726933,
+    "seen": 1794118283.2357867,
+    "ast_hash": "12e07795b71920f49b720179681e5f54",
     "semantic_hash": ""
   },
   "e2e/playwright.config.ts": {
@@ -1158,15 +1158,15 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/Hero.tsx": {
-    "mtime": 1794116064.939497,
-    "seen": 1794116591.322634,
-    "ast_hash": "d2515f969769fdeef29a1fa57d0717c6",
+    "mtime": 1794117492.9356766,
+    "seen": 1794118283.235513,
+    "ast_hash": "7c680efd5259061d4955f8a6a3cf1dbe",
     "semantic_hash": ""
   },
   "apps/web/src/components/Lifecycle.tsx": {
-    "mtime": 1794116070.6667335,
-    "seen": 1794116591.3226366,
-    "ast_hash": "714f2e7e1a3c230f96a9920b32a2345c",
+    "mtime": 1794117485.690767,
+    "seen": 1794118283.2355146,
+    "ast_hash": "c67ee8fed0821f432e020df528c5e844",
     "semantic_hash": ""
   },
   "apps/web/src/components/Seal.tsx": {

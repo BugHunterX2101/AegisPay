@@ -1,5 +1,6 @@
 import { X } from '@phosphor-icons/react';
 import { useEffect, useRef } from 'react';
+import { formatClock } from '../format.ts';
 import { useStore } from '../store.ts';
 import type { FeedItem } from '../types.ts';
 
@@ -56,7 +57,7 @@ export function AgentDrawer() {
           <li key={f.key} data-kind={f.kind}>
             <div className="feed-head">
               <span className={`kind kind-${f.kind.split('.')[0]}`}>{LABEL[f.kind]}</span>
-              <time dateTime={new Date(f.at).toISOString()}>{new Date(f.at).toLocaleTimeString()}</time>
+              <time dateTime={new Date(f.at).toISOString()}>{formatClock(f.at)}</time>
             </div>
             <div>{headline(f)}</div>
             <details>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../api.ts';
-import { money } from '../format.ts';
+import { formatDay, money } from '../format.ts';
 import { useStore } from '../store.ts';
 import type { OrderRow } from '../types.ts';
 import { loadAll } from '../useStream.ts';
@@ -92,7 +92,7 @@ export function PayPalApproveDialog({ order, onClose }: { order: OrderRow; onClo
       <p>
         <strong>Hold {money(order.amountMinor, order.currency)}</strong> for {order.title ?? 'this order'}
         {order.domain ? ` from ${order.domain}` : ''}. Capture happens only after delivery is recorded and the proof gate
-        passes; if the supplier misses {order.deliverBy} you can void the hold.
+        passes; if the supplier misses {formatDay(order.deliverBy)} you can void the hold.
       </p>
       <div className="actions stack">
         <button className="paypal" disabled={phase !== 'ready'} onClick={start} data-testid="paypal-button">

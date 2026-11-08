@@ -12,20 +12,22 @@ const EXAMPLE = 'Buy one usb-c cable for at most 15 dollars, delivered within tw
  * reviews the chips, confirms, and the deterministic gatekeeper checks every offer sourced against it.
  */
 export function MandateStrip({ onApprove }: { onApprove: (o: OrderRow) => void }) {
-  const toast = useStore((s) => s.toast);
   const [text, setText] = useState('');
   const [draft, setDraft] = useState<MandateDraft | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [mandateId, setMandateId] = useState<string | null>(null);
   const [proposals, setProposals] = useState<Proposal[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Shown next to the form it belongs to, and read out as it appears; a toast alone is easy to miss and gone from the page.
+  const [error, setError] = useState('');
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(label);
+    setError('');
     try {
       await fn();
     } catch (e) {
-      toast('error', errorMessage(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(null);
     }
@@ -47,7 +49,7 @@ export function MandateStrip({ onApprove }: { onApprove: (o: OrderRow) => void }
       setMandateId(mandate.id);
       const r = await api<{ proposals: Proposal[] }>('POST', `/api/mandates/${mandate.id}/source`, {});
       setProposals(r.proposals);
-      if (r.proposals.length === 0) toast('error', 'The live catalog returned no offers for that search');
+      if (r.proposals.length === 0) setError('The live catalog returned no offers for that search. Try different keywords.');
     });
 
   const hold = (p: Proposal) =>
@@ -82,17 +84,18 @@ export function MandateStrip({ onApprove }: { onApprove: (o: OrderRow) => void }
       </div>
 
       {draft && (
-        <div className="chips" data-testid="mandate-chips">
+        // Once signed, the mandate is what the gatekeeper checks against; editing the form after that would change nothing.
+        <fieldset className="chips" data-testid="mandate-chips" disabled={!!mandateId}>
           <label>Keywords
             <input name="keywords" autoComplete="off" value={draft.spec.keywords.join(', ')} onChange={(e) => set('spec', { ...draft.spec, keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })} />
           </label>
           <label>Quantity
             <input name="quantity" autoComplete="off" type="number" min={1} value={draft.quantity} onChange={(e) => set('quantity', Math.max(1, Number(e.target.value) || 1))} />
           </label>
-          <label>Ceiling per unit ({money(draft.unitCeiling, cur)})
+          <label>Ceiling per unit, in cents ({money(draft.unitCeiling, cur)})
             <input name="unitCeiling" autoComplete="off" spellCheck={false} value={draft.unitCeiling} onChange={(e) => set('unitCeiling', e.target.value.replace(/\D/g, ''))} inputMode="numeric" />
           </label>
-          <label>Budget ({money(draft.budget, cur)})
+          <label>Budget, in cents ({money(draft.budget, cur)})
             <input name="budget" autoComplete="off" spellCheck={false} value={draft.budget} onChange={(e) => set('budget', e.target.value.replace(/\D/g, ''))} inputMode="numeric" />
           </label>
           <label>Deliver by
@@ -101,9 +104,10 @@ export function MandateStrip({ onApprove }: { onApprove: (o: OrderRow) => void }
           <button className="primary" disabled={!!busy || !!mandateId} onClick={confirm} data-testid="mandate-confirm">
             {busy === 'confirm' ? 'Searching live catalog…' : mandateId ? 'Mandate signed' : 'Confirm and search'}
           </button>
-        </div>
+        </fieldset>
       )}
       {warnings.length > 0 && <p className="note">{warnings.join(' · ')}</p>}
+      {error && <p className="note" role="alert" data-testid="mandate-error">{error}</p>}
 
       {proposals && proposals.length > 0 && (
         <table className="proposals" data-testid="proposals">
@@ -114,7 +118,13 @@ export function MandateStrip({ onApprove }: { onApprove: (o: OrderRow) => void }
                 <td>{p.title}</td>
                 <td>{p.domain}</td>
                 <td>{money(p.unitPriceMinor, cur)}</td>
-                <td><span className={`gate ${p.gatePass ? 'pass' : 'fail'}`}>{p.gatePass ? '✓ passed' : '✗ blocked'}</span></td>
+                <td>
+                  <span className={`gate ${p.gatePass ? 'pass' : 'fail'}`}>{p.gatePass ? '✓ passed' : '✗ blocked'}</span>
+                  {/* Why it was blocked, from the gatekeeper's own rule results: what the mandate required and what the offer had. */}
+                  {!p.gatePass && p.gateResults?.filter((r) => !r.pass).map((r) => (
+                    <small key={r.id} className="why">{r.label}: needs {r.expected}, offer has {r.actual}</small>
+                  ))}
+                </td>
                 <td>
                   {p.gatePass && (
                     <button className="primary sm" disabled={!!busy} onClick={() => hold(p)} data-testid="hold">

@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 import { api, errorMessage, getSession } from './api.ts';
 import { AgentDrawer } from './components/AgentDrawer.tsx';
 import { Ambient } from './components/Ambient.tsx';
-import { ShipDialog, VoidDialog } from './components/Dialogs.tsx';
+import { CancelDialog, ShipDialog, VoidDialog } from './components/Dialogs.tsx';
 import { EvidenceModal } from './components/EvidenceModal.tsx';
 import { Footer } from './components/Footer.tsx';
 import { Hero } from './components/Hero.tsx';
@@ -26,13 +26,15 @@ function Stream() {
 function Toasts() {
   const toasts = useStore((s) => s.toasts);
   const dismiss = useStore((s) => s.dismissToast);
+  // A confirmation clears itself; an error stays until it is dismissed, because it is the one thing a person must not miss.
   useEffect(() => {
-    if (toasts.length === 0) return;
-    const t = setTimeout(() => dismiss(toasts[0]!.id), 6000);
+    const next = toasts.find((t) => t.kind === 'ok');
+    if (!next) return;
+    const t = setTimeout(() => dismiss(next.id), 5000);
     return () => clearTimeout(t);
   }, [toasts, dismiss]);
   return (
-    <div className="toasts" aria-live="polite">
+    <div className="toasts" role="status" aria-live="polite">
       {toasts.map((t) => (
         <button key={t.id} type="button" className={`toast toast-${t.kind}`} onClick={() => dismiss(t.id)} aria-label={`${t.text}. Dismiss`}>{t.text}</button>
       ))}
@@ -47,6 +49,7 @@ export function App() {
   const [approve, setApprove] = useState<OrderRow | null>(null);
   const [ship, setShip] = useState<OrderRow | null>(null);
   const [voidFor, setVoidFor] = useState<OrderRow | null>(null);
+  const [cancelFor, setCancelFor] = useState<OrderRow | null>(null);
   const [fatal, setFatal] = useState('');
 
   useEffect(() => {
@@ -66,7 +69,7 @@ export function App() {
 
   if (fatal) return <main className="center"><p className="note" role="alert">Could not reach the AegisPay API: {fatal}. Check that it is running, then reload this page.</p></main>;
 
-  const close = () => { setShip(null); setVoidFor(null); };
+  const close = () => { setShip(null); setVoidFor(null); setCancelFor(null); };
   return (
     <>
       {session && <Stream />}
@@ -86,7 +89,7 @@ export function App() {
             <JudgeBanner />
             <MandateStrip onApprove={setApprove} />
             <Suspense fallback={<div className="grid-wrap grid-loading" aria-busy="true">Loading the command grid…</div>}>
-              <CommandGrid approve={setApprove} ship={setShip} voidHold={setVoidFor} evidence={openEvidence} />
+              <CommandGrid approve={setApprove} ship={setShip} voidHold={setVoidFor} cancel={setCancelFor} evidence={openEvidence} />
             </Suspense>
           </div>
         </section>
@@ -98,6 +101,7 @@ export function App() {
       <AgentDrawer />
       {ship && <ShipDialog order={ship} onClose={close} />}
       {voidFor && <VoidDialog order={voidFor} onClose={close} />}
+      {cancelFor && <CancelDialog order={cancelFor} onClose={close} />}
       {approve && <PayPalApproveDialog order={approve} onClose={() => setApprove(null)} />}
       {evidenceFor && <EvidenceModal disputeId={evidenceFor} onClose={() => openEvidence(null)} />}
       <Toasts />

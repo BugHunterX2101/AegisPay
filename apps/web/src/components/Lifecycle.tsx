@@ -22,7 +22,7 @@ const CHAPTERS = [
   {
     verb: 'Hold',
     title: 'You approve in PayPal. The money is held, not moved.',
-    body: 'An authorization places a hold on the buyer’s funds, with the delivery deadline attached to it.',
+    body: 'An authorization places a hold on the buyer’s funds, tied to the signed mandate by its hash. The delivery deadline is enforced here, not by PayPal.',
     mark: 'intent: AUTHORIZE',
   },
   {

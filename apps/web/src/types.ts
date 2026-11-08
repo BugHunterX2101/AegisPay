@@ -59,6 +59,9 @@ export interface AuditEvent {
   hash: string;
 }
 
+/** One gatekeeper rule's verdict on an offer: what it required and what the offer had. */
+export interface GateRuleResult { id: string; pass: boolean; label: string; expected: string; actual: string }
+
 export interface Proposal {
   id: string;
   title: string;
@@ -66,7 +69,7 @@ export interface Proposal {
   gatePass: boolean;
   decisionSha256: string;
   unitPriceMinor: string;
-  reasons?: unknown;
+  gateResults?: GateRuleResult[];
   [k: string]: unknown;
 }
 
