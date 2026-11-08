@@ -1158,9 +1158,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/Hero.tsx": {
-    "mtime": 1794111130.3907003,
-    "seen": 1794111953.3153436,
-    "ast_hash": "48d2a79788444054f513afe018bb3bf7",
+    "mtime": 1794114713.7530901,
+    "seen": 1794114982.825726,
+    "ast_hash": "0de8c9da6e3adaf1f7e24a3f8c976b19",
     "semantic_hash": ""
   },
   "apps/web/src/components/Lifecycle.tsx": {
@@ -1199,16 +1199,10 @@
     "ast_hash": "6d856a71f3e981f8db84cbbba93aaab2",
     "semantic_hash": ""
   },
-  ".taste-skill/effects-history.json": {
-    "mtime": 1794110652.4674313,
-    "seen": 1794111953.3150716,
-    "ast_hash": "4b3dd75f6272c3e14d2659a84989805f",
-    "semantic_hash": ""
-  },
   "apps/web/src/scene/plate.ts": {
-    "mtime": 1794111675.0743666,
-    "seen": 1794111953.315385,
-    "ast_hash": "6fa70101418a4fd194b13115813e0564",
+    "mtime": 1794114704.6031575,
+    "seen": 1794114982.8257673,
+    "ast_hash": "26238a4df88b63725977687de225b361",
     "semantic_hash": ""
   },
   "pnpm-lock.yaml": {

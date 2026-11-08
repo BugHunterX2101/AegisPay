@@ -64,18 +64,18 @@ export function MandateStrip({ onApprove }: { onApprove: (o: OrderRow) => void }
   return (
     <section className="strip" aria-label="Mandate" data-testid="mandate-strip">
       <div className="strip-row">
-        <input
-          className="grow"
-          aria-label="What should the agent buy?"
-          name="mandate"
-          autoComplete="off"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && text.trim().length > 3 && !busy && parse()}
-          placeholder="What should the agent buy? e.g. one steel water bottle, at most $25, by the 20th…"
-          data-testid="mandate-text"
-        />
-        <button onClick={() => setText(EXAMPLE)}>Example</button>
+        <label className="grow">What should the agent buy?
+          <input
+            name="mandate"
+            autoComplete="off"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && text.trim().length > 3 && !busy && parse()}
+            placeholder="e.g. one steel water bottle, at most $25, by the 20th…"
+            data-testid="mandate-text"
+          />
+        </label>
+        <button onClick={() => setText(EXAMPLE)}>Fill an example</button>
         <button className="primary" disabled={!!busy || text.trim().length < 4} onClick={parse} data-testid="mandate-parse">
           {busy === 'parse' ? 'Reading…' : 'Draft mandate'}
         </button>

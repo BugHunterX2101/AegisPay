@@ -47,7 +47,8 @@ code, pre, kbd, samp { font-family: var(--font-mono); font-size: 12px; }
 small { font-size: 12px; }
 strong { font-weight: 600; }
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-[tabindex='-1']:focus { outline: none; }
+/* Script-focused containers lose the ring only for pointer focus; keyboard focus keeps :focus-visible above. */
+[tabindex='-1']:focus:not(:focus-visible) { outline: none; }
 
 main.center { display: grid; place-items: center; min-height: 60vh; padding: var(--gutter); }
 .wrap { width: 100%; max-width: var(--wrap); margin-inline: auto; padding-inline: var(--gutter); }
@@ -58,8 +59,8 @@ main.center { display: grid; place-items: center; min-height: 60vh; padding: var
   padding: var(--s-2) var(--s-4); border-radius: var(--radius);
   background: var(--foreground); color: var(--background); font-weight: 600; text-decoration: none;
   transform: translateY(-160%);
-  transition: transform var(--d-fast) var(--ease-out);
 }
+/* Appears the instant it takes focus: a keyboard user should never tab onto something that is still sliding in. */
 .skip:focus { transform: none; color: var(--background); }
 
 /* ---------- controls ---------- */
@@ -208,12 +209,15 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
 .hero-copy { display: grid; gap: var(--s-5); justify-items: start; }
 .hero-title {
   font-family: var(--font-display); font-weight: 500;
-  font-size: clamp(44px, 7.4vw, 108px); line-height: 0.98; letter-spacing: -0.025em;
+  /* The column is ~620px wide at 1440, so the two sentences wrap to four lines; 5.8vw keeps the figures above the fold. */
+  font-size: clamp(40px, 5.8vw, 88px); line-height: 0.98; letter-spacing: -0.025em;
 }
-.hero-title .line { display: block; overflow: hidden; padding-bottom: 0.24em; margin-bottom: -0.24em; }
+/* The entrance mask clips; padding on both sides keeps ascenders and descenders inside it. */
+.hero-title .line { display: block; overflow: hidden; padding-block: 0.12em 0.24em; margin-block: -0.12em -0.24em; }
 .hero-title .line > * { display: inline-block; }
 .hero-title em { font-style: italic; font-weight: 500; color: var(--primary); }
-.lede { max-width: 54ch; font-size: clamp(16px, 1.4vw, 19px); line-height: 1.6; color: var(--muted-foreground); }
+/* Body copy is a step off the ink, not the grey of captions: it clears 7:1 on paper and on the card. */
+.lede { max-width: 54ch; font-size: clamp(16px, 1.4vw, 19px); line-height: 1.6; color: color-mix(in srgb, var(--foreground) 82%, var(--background)); }
 .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-5); }
 
 .figures {
@@ -261,7 +265,7 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
   border-block: 1px solid var(--border);
   padding-block: var(--s-8) var(--s-9);
 }
-.console:focus { outline: none; }
+.console:focus:not(:focus-visible) { outline: none; }
 .console-inner { display: grid; gap: var(--s-5); }
 
 .banner {
@@ -282,9 +286,10 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
   border: 1px solid var(--border); border-radius: var(--radius-lg);
   background: var(--card); box-shadow: var(--shadow-1);
 }
-.strip-row { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.strip-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-2); }
 .grow { flex: 1 1 320px; }
-.strip-row > .grow { min-height: 48px; font-size: 16px; }
+.strip-row > .grow > input { min-height: 48px; font-size: 16px; }
+.strip-row > button { min-height: 48px; }
 .chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--s-3); align-items: end; }
 
 .proposals, .detail table, .modal table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -321,7 +326,7 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
 .chapter-n { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); }
 .chapter-n span { color: var(--primary); margin-right: var(--s-1); }
 .chapter h3 { font-family: var(--font-display); font-weight: 500; font-size: clamp(22px, 2vw, 28px); line-height: 1.15; letter-spacing: -0.01em; }
-.chapter p:not(.chapter-n) { color: var(--muted-foreground); max-width: 52ch; }
+.chapter p:not(.chapter-n) { color: color-mix(in srgb, var(--foreground) 82%, var(--background)); max-width: 52ch; }
 .chapter-mark {
   justify-self: start; padding: 3px var(--s-2);
   border: 1px solid var(--border-strong); border-radius: var(--radius);
@@ -416,7 +421,7 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
   background: var(--card); box-shadow: var(--shadow-2);
   animation: modal-in var(--d-base) var(--ease-out);
 }
-.modal:focus { outline: none; }
+.modal:focus:not(:focus-visible) { outline: none; }
 .modal-wide { width: min(780px, 100%); }
 .modal header, .drawer header {
   position: sticky; top: 0; z-index: 1;
@@ -493,6 +498,16 @@ button.toast-error { border-left-color: var(--tone-garnet); color: var(--tone-ga
   .modal button.icon, .drawer button.icon { min-width: 44px; }
   input, select, textarea, label > input, label > select, label > textarea { min-height: 44px; font-size: 16px; }
 }
+
+/* Touch: links and small controls outside the dialogs reach a 44px target; pills grow their hit area, not their look. */
+@media (pointer: coarse), (max-width: 640px) {
+  .link-arrow, .judge button.sm { min-height: 44px; }
+  button.pill { position: relative; }
+  button.pill::before { content: ''; position: absolute; inset: -5px 0; }
+}
+
+/* The grid's own focus change is a faint shadow (about 2:1); keyboard focus on a header cell gets the page ring. */
+.ag-header-cell:focus-visible, .ag-header-group-cell:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
 
 /* ---------- reduced motion: no transforms, no travel ---------- */
 @media (prefers-reduced-motion: reduce) {

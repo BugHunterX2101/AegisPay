@@ -6,7 +6,7 @@ export function Footer() {
       <div className="wrap footer-row">
         <div className="footer-brand">
           <Seal size={24} />
-          <span className="wordmark">AegisPay</span>
+          <span className="wordmark" translate="no">AegisPay</span>
         </div>
         <p className="footer-note">
           A PayPal AI Hackathon 2026 entry. Everything here runs against the PayPal sandbox and no real money moves. PayPal is a

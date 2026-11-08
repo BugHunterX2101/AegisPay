@@ -77,10 +77,10 @@ export function PayPalApproveDialog({ order, onClose }: { order: OrderRow; onClo
     return (
       <Modal title="Approve this hold" onClose={onClose}>
         <p className="note" role="status">
-          This order has no PayPal order yet, so it can't be approved. Cancel it and draft the purchase again.
+          This order has no PayPal order yet, so it can’t be approved. Cancel it and draft the purchase again.
         </p>
         <div className="actions">
-          <button onClick={onClose}>OK</button>
+          <button onClick={onClose}>Close</button>
         </div>
       </Modal>
     );

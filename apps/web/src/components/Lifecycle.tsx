@@ -60,7 +60,8 @@ export function Lifecycle() {
         const last = panels.length - 1;
         const mark = (active: number) => ticks.forEach((t, i) => (t.dataset.state = i < active ? 'done' : i === active ? 'active' : 'todo'));
         mark(0);
-        gsap.set(panels.slice(1), { autoAlpha: 0, y: 32 });
+        // opacity, not autoAlpha: autoAlpha adds visibility:hidden, which would hide chapters 2 to 5 from screen readers.
+        gsap.set(panels.slice(1), { opacity: 0, y: 32 });
 
         const tl = gsap.timeline({
           defaults: { ease: 'none' },
@@ -78,7 +79,7 @@ export function Lifecycle() {
         tl.to('.rail-fill', { scaleY: 1, duration: last }, 0);
         panels.forEach((p, i) => {
           if (i === 0) return;
-          tl.to(panels[i - 1]!, { autoAlpha: 0, y: -32, duration: 0.35 }, i - 0.6).to(p, { autoAlpha: 1, y: 0, duration: 0.35 }, i - 0.4);
+          tl.to(panels[i - 1]!, { opacity: 0, y: -32, duration: 0.35 }, i - 0.6).to(p, { opacity: 1, y: 0, duration: 0.35 }, i - 0.4);
         });
 
         // Fonts change line heights, which moves the pin's start and end.

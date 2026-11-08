@@ -99,7 +99,7 @@ export function EvidenceModal({ disputeId, onClose }: { disputeId: string; onClo
             <>
               <label className="check">
                 <input type="checkbox" checked={attested} onChange={(e) => setAttested(e.target.checked)} data-testid="attest" />
-                I&apos;ve checked these facts against the files above and they are true.
+                I’ve checked these facts against the files above and they are true.
               </label>
               <div className="actions">
                 <button className="primary" disabled={!attested || !!busy} onClick={submit} data-testid="submit-evidence">

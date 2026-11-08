@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/App.tsx": {
-    "mtime": 1794109869.193968,
-    "seen": 1794110273.5594995,
-    "ast_hash": "b81ac6d1dd6f0c05c1646f12356105cf",
+    "mtime": 1794116271.009486,
+    "seen": 1794116591.3226063,
+    "ast_hash": "21dd79ce6b1e32e6cc907bc6d8527364",
     "semantic_hash": ""
   },
   "apps/web/src/api.ts": {
@@ -978,33 +978,33 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/AgentDrawer.tsx": {
-    "mtime": 1794079016.2159584,
-    "seen": 1794079248.821383,
-    "ast_hash": "b6739ea8289188252aa062e8c5866133",
+    "mtime": 1794116301.0504596,
+    "seen": 1794116591.3226142,
+    "ast_hash": "83c4a7b4a4a552faad1b6d626f88dc41",
     "semantic_hash": ""
   },
   "apps/web/src/components/CommandGrid.tsx": {
-    "mtime": 1794109882.7782235,
-    "seen": 1794110273.5595074,
-    "ast_hash": "21b8969566ad82d7355b1846aef80a9e",
+    "mtime": 1794116242.7899365,
+    "seen": 1794116591.3226225,
+    "ast_hash": "61997b0ec5d5480827b53c36632a6ea3",
     "semantic_hash": ""
   },
   "apps/web/src/components/Dialogs.tsx": {
-    "mtime": 1794079024.4134724,
-    "seen": 1794079248.8213947,
-    "ast_hash": "b0ee3c5e744bb689b3a3ca16a26f0d19",
+    "mtime": 1794116280.3851233,
+    "seen": 1794116591.3226266,
+    "ast_hash": "5faadd4104c590a775c85e67553233b2",
     "semantic_hash": ""
   },
   "apps/web/src/components/EvidenceModal.tsx": {
-    "mtime": 1794058934.1565106,
-    "seen": 1794059494.1549354,
-    "ast_hash": "ee81beae4784eff6f130fa3af77b5677",
+    "mtime": 1794116283.0823483,
+    "seen": 1794116591.3226295,
+    "ast_hash": "3b8ce17a56f777c37b872b997f9e03f6",
     "semantic_hash": ""
   },
   "apps/web/src/components/MandateStrip.tsx": {
-    "mtime": 1794079010.9755275,
-    "seen": 1794079248.8214123,
-    "ast_hash": "18e2e0292168326d8ab87ad4d5da8ddc",
+    "mtime": 1794116252.5426135,
+    "seen": 1794116591.3226397,
+    "ast_hash": "bf32bbe4eaac6553d93009a67801436c",
     "semantic_hash": ""
   },
   "apps/web/src/components/Modal.tsx": {
@@ -1014,9 +1014,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/PayPalApprove.tsx": {
-    "mtime": 1794110814.0859442,
-    "seen": 1794111953.3153565,
-    "ast_hash": "7e2a9138e3374785f74a86fa75be33ec",
+    "mtime": 1794116285.7138314,
+    "seen": 1794116591.322645,
+    "ast_hash": "bd0c2b69a730a7909d5e82d8448fb397",
     "semantic_hash": ""
   },
   "apps/web/src/components/StateChip.tsx": {
@@ -1152,21 +1152,21 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/Footer.tsx": {
-    "mtime": 1794075083.5138335,
-    "seen": 1794079248.8214016,
-    "ast_hash": "3fcf6223bdfc7ed5ed8f6cba3ad887fd",
+    "mtime": 1794116289.3552322,
+    "seen": 1794116591.3226314,
+    "ast_hash": "545c215a9c15d7a482df0283ed8d9357",
     "semantic_hash": ""
   },
   "apps/web/src/components/Hero.tsx": {
-    "mtime": 1794114713.7530901,
-    "seen": 1794114982.825726,
-    "ast_hash": "0de8c9da6e3adaf1f7e24a3f8c976b19",
+    "mtime": 1794116064.939497,
+    "seen": 1794116591.322634,
+    "ast_hash": "d2515f969769fdeef29a1fa57d0717c6",
     "semantic_hash": ""
   },
   "apps/web/src/components/Lifecycle.tsx": {
-    "mtime": 1794078722.2833407,
-    "seen": 1794079248.8214097,
-    "ast_hash": "ce8288b0e3654e0b08901f692b5b38ef",
+    "mtime": 1794116070.6667335,
+    "seen": 1794116591.3226366,
+    "ast_hash": "714f2e7e1a3c230f96a9920b32a2345c",
     "semantic_hash": ""
   },
   "apps/web/src/components/Seal.tsx": {

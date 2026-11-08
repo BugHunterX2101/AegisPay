@@ -1,5 +1,5 @@
 import { X } from '@phosphor-icons/react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useStore } from '../store.ts';
 import type { FeedItem } from '../types.ts';
 
@@ -32,9 +32,20 @@ export function AgentDrawer() {
     return () => document.removeEventListener('keydown', onKey);
   }, [open, setDrawer]);
 
+  // Focus moves into the drawer when it opens and returns to whatever opened it when it closes.
+  const box = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const opener = document.activeElement as HTMLElement | null;
+    box.current?.focus({ preventScroll: true });
+    return () => {
+      if (opener?.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, [open]);
+
   if (!open) return null;
   return (
-    <aside className="drawer" aria-labelledby="drawer-title" data-testid="agent-drawer">
+    <aside className="drawer" ref={box} tabIndex={-1} aria-labelledby="drawer-title" data-testid="agent-drawer">
       <header>
         <h2 id="drawer-title">Agent activity</h2>
         <button className="icon" aria-label="Close agent activity" onClick={() => setDrawer(false)}><X size={18} aria-hidden="true" /></button>

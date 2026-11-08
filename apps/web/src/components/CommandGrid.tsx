@@ -178,6 +178,7 @@ export function CommandGrid(ctx: GridCtx) {
         cellRenderer: 'agGroupCellRenderer',
         cellRendererParams: { suppressCount: true },
         valueFormatter: (p) => p.value ?? '(untitled)',
+        tooltipField: 'title',
         minWidth: 260,
         flex: 2,
       },

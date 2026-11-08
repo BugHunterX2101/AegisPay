@@ -64,7 +64,7 @@ export function App() {
     })();
   }, []);
 
-  if (fatal) return <main className="center"><p className="note">Could not reach the AegisPay API: {fatal}</p></main>;
+  if (fatal) return <main className="center"><p className="note" role="alert">Could not reach the AegisPay API: {fatal}. Check that it is running, then reload this page.</p></main>;
 
   const close = () => { setShip(null); setVoidFor(null); };
   return (

@@ -71,7 +71,7 @@ export function VoidDialog({ order, onClose }: { order: OrderRow; onClose: () =>
   return (
     <Modal title="Void this hold?" onClose={onClose}>
       <p>
-        This releases the {money(order.amountMinor, order.currency)} hold on the buyer&apos;s PayPal account. Nothing is
+        This releases the {money(order.amountMinor, order.currency)} hold on the buyer’s PayPal account. Nothing is
         charged. It cannot be undone.
       </p>
       <label>Reason

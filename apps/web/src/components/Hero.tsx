@@ -186,7 +186,7 @@ export function Hero() {
           {failed ? <RingsFallback /> : <canvas ref={canvas} className="hero-canvas" aria-hidden="true" />}
           {/* One control for everything that moves on its own in the hero: the scene and the plate. */}
           {!reduced && (
-            <button className="stage-pause sm" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
+            <button className="stage-pause sm" onClick={() => setPaused((p) => !p)}>
               {paused ? 'Play motion' : 'Pause motion'}
             </button>
           )}
