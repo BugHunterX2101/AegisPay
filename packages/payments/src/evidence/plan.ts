@@ -105,11 +105,16 @@ export function planEvidence(reason: DisputeReason, facts: EvidenceFacts): PlanR
   }
 }
 
-/** The `input` JSON part of provide-evidence. Notes are never silently cut: over the limit is a validation error. */
-export function buildEvidenceInput(plan: Extract<PlanResult, { status: 'PLANNED' }>, notes: string) {
+function checkedNotes(notes: string): string {
   const text = notes.trim();
   if (!text) throw new DomainError('VALIDATION', 'evidence notes are required');
   if (text.length > MAX_NOTES_CHARS) throw new DomainError('VALIDATION', `evidence notes are ${text.length} characters, the limit is ${MAX_NOTES_CHARS}`);
+  return text;
+}
+
+/** The `input` JSON part of provide-evidence. Notes are never silently cut: over the limit is a validation error. */
+export function buildEvidenceInput(plan: Extract<PlanResult, { status: 'PLANNED' }>, notes: string) {
+  const text = checkedNotes(notes);
   return {
     evidences: plan.evidences.map((e) => ({
       evidence_type: e.evidenceType,
@@ -117,4 +122,13 @@ export function buildEvidenceInput(plan: Extract<PlanResult, { status: 'PLANNED'
       notes: text,
     })),
   };
+}
+
+/**
+ * The `input` JSON part of provide-supporting-info: `{ notes }` (PayPal's schema: notes 1 to 2,000 characters; the
+ * documents go in the same multipart request). This is the seller's only answer while a CHARGEBACK, PRE_ARBITRATION or
+ * ARBITRATION dispute is UNDER_REVIEW. The plan still decides which documents are attached and still blocks a weaker case.
+ */
+export function buildSupportingInfoInput(notes: string) {
+  return { notes: checkedNotes(notes) };
 }

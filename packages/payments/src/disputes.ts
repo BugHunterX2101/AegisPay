@@ -24,7 +24,7 @@ import type { PayPalContext } from './client.ts';
 import { paypalRest } from './rest.ts';
 import { MAX_FILE_BYTES, MAX_TOTAL_BYTES, bundleSha256, renderPdfs } from './evidence/pdf.ts';
 import type { RenderFacts } from './evidence/pdf.ts';
-import { MAX_FILES, MAX_NOTES_CHARS, buildEvidenceInput, planEvidence } from './evidence/plan.ts';
+import { MAX_FILES, MAX_NOTES_CHARS, buildEvidenceInput, buildSupportingInfoInput, planEvidence } from './evidence/plan.ts';
 import type { EvidenceFacts, PlanResult } from './evidence/plan.ts';
 
 /* ------------------------------------------------------------------------------------------------------------------
@@ -43,6 +43,9 @@ export interface PayPalDispute {
   outcomeCode: string | null;
   /** `disputed_transactions[].seller_transaction_id`: the capture ids the buyer is disputing. */
   transactionIds: string[];
+  /** How many `evidences[]` and `supporting_info[]` entries PayPal lists, used to read back a submission. */
+  evidenceCount: number;
+  supportingInfoCount: number;
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
@@ -84,6 +87,8 @@ function parseDispute(raw: unknown, expectedId: string): PayPalDispute {
     links,
     outcomeCode: str(obj(d.dispute_outcome)?.outcome_code),
     transactionIds: txIds,
+    evidenceCount: Array.isArray(d.evidences) ? d.evidences.length : 0,
+    supportingInfoCount: Array.isArray(d.supporting_info) ? d.supporting_info.length : 0,
   };
 }
 
@@ -100,12 +105,47 @@ export async function fetchDispute(ctx: PayPalContext, disputeId: string): Promi
   return parseDispute(res.result, disputeId);
 }
 
-/** PayPal's documentation writes this rel with a hyphen, sandbox payloads have been seen with an underscore. Accept both. */
+/**
+ * PayPal's documentation writes action rels with a hyphen; the live sandbox sends them with an underscore (observed on a
+ * real CHARGEBACK dispute: `accept_claim`, `provide_supporting_info`). Accept both.
+ */
 const norm = (rel: string) => rel.toLowerCase().replace(/_/g, '-');
-export const hasProvideEvidenceLink = (links: readonly DisputeLink[]): boolean => links.some((l) => norm(l.rel) === 'provide-evidence');
+const hasLink = (links: readonly DisputeLink[], rel: string): boolean => links.some((l) => norm(l.rel) === rel);
+export const hasProvideEvidenceLink = (links: readonly DisputeLink[]): boolean => hasLink(links, 'provide-evidence');
+export const hasSupportingInfoLink = (links: readonly DisputeLink[]): boolean => hasLink(links, 'provide-supporting-info');
 
-/** The only status in which PayPal lets a seller answer. */
+/** The only status in which PayPal lets a seller provide evidence. */
 export const SELLER_TURN = 'WAITING_FOR_SELLER_RESPONSE';
+
+/** Stages in which PayPal accepts provide-supporting-info (Disputes v1 reference). Never INQUIRY. */
+export const SUPPORTING_INFO_STAGES: ReadonlySet<string> = new Set(['CHARGEBACK', 'PRE_ARBITRATION', 'ARBITRATION']);
+
+/**
+ * The two seller answers this system can send. Which one applies is PayPal's call, read from the dispute's live links:
+ * provide-evidence when PayPal has asked the seller for evidence (WAITING_FOR_SELLER_RESPONSE), provide-supporting-info
+ * while PayPal reviews a CHARGEBACK / PRE_ARBITRATION / ARBITRATION case (UNDER_REVIEW). `accept_claim` is never used:
+ * it refunds the buyer, and that is a human's decision made in PayPal, not an evidence step.
+ */
+export type DisputeResponse = 'provide-evidence' | 'provide-supporting-info';
+
+export function offeredResponse(links: readonly DisputeLink[]): DisputeResponse | null {
+  if (hasProvideEvidenceLink(links)) return 'provide-evidence';
+  if (hasSupportingInfoLink(links)) return 'provide-supporting-info';
+  return null;
+}
+
+/**
+ * Which PayPal endpoint a stored bundle is for, read from the shape of its hashed `input` JSON: `{evidences:[...]}` is a
+ * provide-evidence body, `{notes}` a provide-supporting-info body. Because the shape is covered by the bundle hash, a
+ * human's attestation to that hash also fixes which write it authorises.
+ */
+export function bundleTarget(inputJson: unknown): DisputeResponse | null {
+  const o = obj(inputJson);
+  if (!o) return null;
+  if (Array.isArray(o.evidences)) return 'provide-evidence';
+  if (typeof o.notes === 'string' && !('evidences' in o)) return 'provide-supporting-info';
+  return null;
+}
 
 /** PayPal's outcome codes that clearly say who won. Anything else is recorded and shown to a human, never guessed at. */
 export function orderStateForOutcome(code: string | null): 'RESOLVED_WON' | 'RESOLVED_LOST' | null {
@@ -382,7 +422,11 @@ export async function buildEvidenceBundle(ctx: PayPalContext, disputeId: string,
     return { status: 'BLOCKED', missing: plan.missing, reason: plan.reason };
   }
 
-  const input = buildEvidenceInput(plan, notes); // throws VALIDATION on blank or over-long notes
+  // The answer PayPal offers right now (from the last sync) decides the body. With nothing offered yet, provide-evidence is
+  // prepared, and submit re-checks PayPal's live links either way.
+  const target = offeredResponse(dispute.links) ?? 'provide-evidence';
+  // Both throw VALIDATION on blank or over-long notes.
+  const input = target === 'provide-supporting-info' ? buildSupportingInfoInput(notes) : buildEvidenceInput(plan, notes);
   const files = await renderPdfs(plan, { ...facts.render, disputeId, generatedAt: ctx.clock.now() });
   const sha256 = bundleSha256(input, files);
   const id = uuidv7(ctx.clock.now().getTime());
@@ -397,6 +441,7 @@ export async function buildEvidenceBundle(ctx: PayPalContext, disputeId: string,
       payload: {
         bundleId: id,
         bundleSha256: sha256,
+        target,
         reason: plan.reason,
         manualReview: plan.manualReview,
         notesSha256: sha256Hex(notes.trim()),
@@ -429,13 +474,20 @@ export function assertBundleIntegrity(b: EvidenceBundleRow): void {
   }
   if (total >= MAX_TOTAL_BYTES) bad('files together are over 50 MB');
   if (bundleSha256(b.inputJson, b.files) !== b.sha256) bad('the stored input and files do not match the bundle hash');
-  const evidences = obj(b.inputJson)?.evidences;
-  if (!Array.isArray(evidences) || evidences.length === 0) bad('no evidences');
-  for (const e of evidences as unknown[]) {
-    const notes = str(obj(e)?.notes);
-    if (!notes) bad('an evidence has no notes');
+  const target = bundleTarget(b.inputJson);
+  if (!target) bad('no evidences and no supporting-info notes');
+  const checkNotes = (raw: unknown, missing: string) => {
+    const notes = str(raw);
+    if (!notes) bad(missing);
     else if (notes.length > MAX_NOTES_CHARS) bad(`notes are ${notes.length} characters, the limit is ${MAX_NOTES_CHARS}`);
+  };
+  if (target === 'provide-supporting-info') {
+    checkNotes(obj(b.inputJson)?.notes, 'the supporting-info notes are empty');
+    return;
   }
+  const evidences = obj(b.inputJson)?.evidences as unknown[];
+  if (evidences.length === 0) bad('no evidences');
+  for (const e of evidences) checkNotes(obj(e)?.notes, 'an evidence has no notes');
 }
 
 /** A named human's attestation that they read the bundle. Required before it can be submitted. */
@@ -452,7 +504,7 @@ export async function reviewEvidenceBundle(ctx: PayPalContext, bundleId: string,
       type: 'EVIDENCE_REVIEWED',
       entity: 'dispute',
       entityId: b.disputeId ?? bundleId,
-      payload: { bundleId, bundleSha256: b.sha256, files: b.files.map((f) => ({ name: f.name, sha256: f.sha256 })) },
+      payload: { bundleId, bundleSha256: b.sha256, target: bundleTarget(b.inputJson), files: b.files.map((f) => ({ name: f.name, sha256: f.sha256 })) },
     });
     return { ...b, reviewedBy: reviewedBy.trim() };
   }, ctx.db);
@@ -470,13 +522,18 @@ export interface SubmitResult {
 }
 
 /**
- * Send a reviewed bundle to PayPal (POST /v1/customer/disputes/{id}/provide-evidence, multipart).
+ * Send a reviewed bundle to PayPal, multipart, to the endpoint the bundle was prepared (and attested) for:
+ * POST /v1/customer/disputes/{id}/provide-evidence or /provide-supporting-info.
  *
  * Every condition is checked immediately before the call, against PayPal's live answer, not against what we stored
  * earlier:
  *   1. the bundle exists, is unsubmitted, was reviewed by a named human, and still matches its hash byte for byte;
  *   2. the order is DISPUTED;
- *   3. a fresh GET shows status WAITING_FOR_SELLER_RESPONSE, a provide-evidence link, and a response window still open.
+ *   3. a fresh GET offers the very action the bundle is for (a bundle prepared for the other one is refused, so a new
+ *      human review covers what is actually sent), and
+ *      - provide-evidence: status WAITING_FOR_SELLER_RESPONSE, the link, and a response window still open;
+ *      - provide-supporting-info: the link, and a CHARGEBACK / PRE_ARBITRATION / ARBITRATION stage.
+ * After the commit, the dispute is read back from PayPal and what it now lists is audited (EVIDENCE_READBACK).
  * The bundle row is locked for the whole call, so two submitters cannot both send it. The POST carries no
  * PayPal-Request-Id and a 5xx or network error on it is NOT retried (the request may have been processed), so a failed
  * submit is a visible error a person re-tries, never a silent duplicate. If PayPal accepted the POST but our commit then
@@ -486,7 +543,11 @@ export interface SubmitResult {
 export async function submitEvidence(ctx: PayPalContext, bundleId: string, submittedBy: string): Promise<SubmitResult> {
   if (!submittedBy.trim()) throw new DomainError('FORBIDDEN', 'submitting evidence needs a named human');
 
-  return withTx(async (tx) => {
+  type Sent = SubmitResult & { sent: { target: DisputeResponse; before: PayPalDispute } | null };
+  // Set when PayPal now offers the other action: its fresh links are saved after the refusal rolls back, so that
+  // "draft again" builds for what PayPal actually accepts instead of the stale links.
+  let staleLinks: { live: PayPalDispute; orderId: string } | null = null;
+  const run = () => withTx(async (tx): Promise<Sent> => {
     const b = await getEvidenceBundle(tx, bundleId, { forUpdate: true });
     if (!b) throw new DomainError('NOT_FOUND', `Evidence bundle ${bundleId} not found`);
     if (!b.disputeId) throw new DomainError('BAD_STATE', 'bundle is not attached to a dispute');
@@ -517,7 +578,7 @@ export async function submitEvidence(ctx: PayPalContext, bundleId: string, submi
         ...(accepted.paypalDebugId ? { paypalDebugId: accepted.paypalDebugId } : {}),
         payload: { bundleId, bundleSha256: b.sha256, orderId: dispute.orderId, acceptedAuditSeq: accepted.seq.toString(), note: 'PayPal had already accepted this bundle; nothing was re-sent' },
       });
-      return { bundleId, disputeId: b.disputeId, orderId: dispute.orderId, paypalResponse: null };
+      return { bundleId, disputeId: b.disputeId, orderId: dispute.orderId, paypalResponse: null, sent: null };
     }
 
     const live = await fetchDispute(ctx, b.disputeId);
@@ -531,12 +592,28 @@ export async function submitEvidence(ctx: PayPalContext, bundleId: string, submi
       links: live.links,
       outcome: live.outcomeCode,
     });
-    if (live.status !== SELLER_TURN) throw new DomainError('BAD_STATE', `PayPal says the dispute is ${live.status ?? 'in an unknown status'}, not ${SELLER_TURN}`);
-    if (!hasProvideEvidenceLink(live.links)) throw new DomainError('BAD_STATE', 'PayPal offers no provide-evidence action for this dispute right now');
-    if (live.sellerResponseDue && live.sellerResponseDue.getTime() <= ctx.clock.now().getTime()) {
-      throw new DomainError('BAD_STATE', `the response window closed at ${live.sellerResponseDue.toISOString()}`);
+    // assertBundleIntegrity above has already refused a bundle with no recognisable target.
+    const target = bundleTarget(b.inputJson)!;
+    const offered = offeredResponse(live.links);
+    if (offered && offered !== target) {
+      staleLinks = { live, orderId: dispute.orderId };
+      throw new DomainError('BAD_STATE', `this bundle was prepared for ${target}, but PayPal now accepts ${offered} for this dispute: draft again, so a person reviews what will actually be sent`);
+    }
+    if (target === 'provide-evidence') {
+      if (live.status !== SELLER_TURN) throw new DomainError('BAD_STATE', `PayPal says the dispute is ${live.status ?? 'in an unknown status'}, not ${SELLER_TURN}`);
+      if (!hasProvideEvidenceLink(live.links)) throw new DomainError('BAD_STATE', 'PayPal offers no provide-evidence action for this dispute right now');
+      if (live.sellerResponseDue && live.sellerResponseDue.getTime() <= ctx.clock.now().getTime()) {
+        throw new DomainError('BAD_STATE', `the response window closed at ${live.sellerResponseDue.toISOString()}`);
+      }
+    } else {
+      if (!hasSupportingInfoLink(live.links)) throw new DomainError('BAD_STATE', 'PayPal offers no provide-supporting-info action for this dispute right now');
+      if (!SUPPORTING_INFO_STAGES.has(live.lifeCycleStage ?? '')) {
+        throw new DomainError('BAD_STATE', `PayPal accepts supporting information only in CHARGEBACK, PRE_ARBITRATION or ARBITRATION; this dispute is in ${live.lifeCycleStage ?? 'an unknown stage'}`);
+      }
     }
 
+    // Same multipart shape for both answers: an `input` JSON part (PayPal's own sample for provide-supporting-info sends
+    // `input={"notes":...}`) and one part per PDF.
     const form = new FormData();
     form.append('input', new Blob([JSON.stringify(b.inputJson)], { type: 'application/json' }), 'input.json');
     b.files.forEach((f: EvidenceFile, i) => {
@@ -545,9 +622,9 @@ export async function submitEvidence(ctx: PayPalContext, bundleId: string, submi
 
     const res = await paypalRest<unknown>(ctx, {
       method: 'POST',
-      path: `/v1/customer/disputes/${b.disputeId}/provide-evidence`,
+      path: `/v1/customer/disputes/${b.disputeId}/${target}`,
       form,
-      action: 'dispute_evidence',
+      action: target === 'provide-evidence' ? 'dispute_evidence' : 'dispute_supporting_info',
       // Filed under the bundle so that a surviving ok:true row says exactly which bundle PayPal accepted (see recovery above).
       subject: { type: 'evidence_bundle', id: bundleId },
       write: true,
@@ -567,15 +644,63 @@ export async function submitEvidence(ctx: PayPalContext, bundleId: string, submi
       payload: {
         bundleId,
         bundleSha256: b.sha256,
+        target,
         reviewedBy: b.reviewedBy,
         orderId: dispute.orderId,
         files: b.files.map((f) => ({ name: f.name, sha256: f.sha256 })),
         statusCode: res.statusCode,
         wasInState: live.status,
+        wasInStage: live.lifeCycleStage,
+        before: { evidences: live.evidenceCount, supportingInfo: live.supportingInfoCount },
       },
     });
-    return { bundleId, disputeId: b.disputeId, orderId: dispute.orderId, paypalResponse: response };
+    return { bundleId, disputeId: b.disputeId, orderId: dispute.orderId, paypalResponse: response, sent: { target, before: live } };
   }, ctx.db);
+
+  let result: Sent;
+  try {
+    result = await run();
+  } catch (err) {
+    const stale = staleLinks as { live: PayPalDispute; orderId: string } | null;
+    if (stale) {
+      const { live, orderId } = stale;
+      await withTx(
+        (tx) =>
+          upsertDispute(tx, { paypalDisputeId: live.disputeId, orderId, reason: live.reason, status: live.status, lifeCycleStage: live.lifeCycleStage, sellerResponseDue: live.sellerResponseDue, links: live.links, outcome: live.outcomeCode }),
+        ctx.db,
+      ).catch(() => undefined);
+    }
+    throw err;
+  }
+
+  const { sent, ...out } = result;
+  if (sent) await readBack(ctx, out.disputeId, out.bundleId, sent.target, sent.before);
+  return out;
+}
+
+/**
+ * After a submission is committed, ask PayPal what it now holds and record that, whatever it says. A failed read-back
+ * never undoes the submission (PayPal already has it); it is recorded as not confirmed instead.
+ */
+async function readBack(ctx: PayPalContext, disputeId: string, bundleId: string, target: DisputeResponse, before: PayPalDispute): Promise<void> {
+  let payload: Record<string, unknown>;
+  try {
+    const after = await fetchDispute(ctx, disputeId);
+    const grew = target === 'provide-evidence' ? after.evidenceCount > before.evidenceCount : after.supportingInfoCount > before.supportingInfoCount;
+    payload = {
+      bundleId,
+      target,
+      confirmed: grew,
+      status: after.status,
+      stage: after.lifeCycleStage,
+      evidences: { before: before.evidenceCount, after: after.evidenceCount },
+      supportingInfo: { before: before.supportingInfoCount, after: after.supportingInfoCount },
+      offeredNow: after.links.map((l) => l.rel).filter((r) => norm(r) !== 'self'),
+    };
+  } catch (err) {
+    payload = { bundleId, target, confirmed: false, error: err instanceof Error ? err.message : String(err) };
+  }
+  await withTx((tx) => appendAudit(tx, { actor: 'system:paypal', type: 'EVIDENCE_READBACK', entity: 'dispute', entityId: disputeId, payload }), ctx.db).catch(() => undefined);
 }
 
 /** Exposed for the worker: whether we already sent evidence for a dispute, so a retry job can stop early. */

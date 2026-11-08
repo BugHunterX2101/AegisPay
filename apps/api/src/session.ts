@@ -19,6 +19,8 @@ export interface SessionOptions {
   judgeMode: boolean;
   /** Public by design: the browser needs it to load the PayPal SDK. Never the secret. */
   paypalClientId: string;
+  /** From PAYPAL_ENVIRONMENT (validated by loadPayPalConfig). The browser derives the SDK environment from it. */
+  paypalEnv?: 'sandbox';
 }
 
 export const SESSION_COOKIE = 'aegis_sid';
@@ -78,6 +80,6 @@ export async function installSession(app: FastifyInstance, o: SessionOptions): P
       });
     }
     const csrfToken = reply.generateCsrf();
-    return { actor: `user:${sid}`, csrfToken, judgeMode: o.judgeMode, paypalEnv: 'sandbox', paypalClientId: o.paypalClientId };
+    return { actor: `user:${sid}`, csrfToken, judgeMode: o.judgeMode, paypalEnv: o.paypalEnv ?? 'sandbox', paypalClientId: o.paypalClientId };
   });
 }

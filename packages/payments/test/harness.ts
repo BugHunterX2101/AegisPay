@@ -42,7 +42,7 @@ export async function startHarness(): Promise<Harness> {
   const writes = { enabled: true };
   const ctx = createPayPalContext({
     db: t.db,
-    config: { clientId: CLIENT_ID, clientSecret: CLIENT_SECRET, baseUrl: oauth.baseUrl, webhookId: undefined },
+    config: { environment: 'sandbox', clientId: CLIENT_ID, clientSecret: CLIENT_SECRET, baseUrl: oauth.baseUrl, webhookId: undefined },
     clock,
     restBaseUrl: pp.baseUrl,
     deps: { writesEnabled: () => writes.enabled, sleep: async (ms) => void sleeps.push(ms), random: () => 0.5 },

@@ -51,7 +51,14 @@ describe('createHold', () => {
     });
     expect(pu.items).toHaveLength(1);
     expect(pu.items[0]).toMatchObject({ name: 'USB-C cable 2m', sku: 'sku-1', quantity: '10', category: 'PHYSICAL_GOODS', unit_amount: { currency_code: 'USD', value: '12.50' }, tax: { currency_code: 'USD', value: '1.04' } });
-    expect(call.body.payment_source.paypal.experience_context).toMatchObject({ return_url: `${APP}/approved`, cancel_url: `${APP}/cancelled`, user_action: 'CONTINUE' });
+    expect(call.body.payment_source.paypal.experience_context).toMatchObject({
+      brand_name: 'AegisPay',
+      locale: 'en-US',
+      shipping_preference: 'GET_FROM_FILE',
+      return_url: `${APP}/approved`,
+      cancel_url: `${APP}/cancelled`,
+      user_action: 'CONTINUE',
+    });
 
     const row = await getOrder(h.t.db, s.orderId);
     expect(row!.paypalOrderId).toBe(r.paypalOrderId);
@@ -244,6 +251,29 @@ describe('authorizeHold', () => {
     const err = (await authorizeHold(h.ctx, s.orderId, paypalOrderId).catch((e: unknown) => e)) as DomainError;
     expect(err.code).toBe('ORDER_NOT_APPROVED');
     expect((await getOrder(h.t.db, s.orderId))!.state).toBe('AWAITING_APPROVAL');
+  });
+
+  it('INSTRUMENT_DECLINED is its own error, never retried, audited; the next authorize is a new attempt with a new request id', async () => {
+    const s = await approved();
+    h.pp.failures.push({
+      match: /POST \/v2\/checkout\/orders\/.+\/authorize$/,
+      count: 1,
+      status: 422,
+      body: { name: 'UNPROCESSABLE_ENTITY', message: 'The instrument presented was either declined by the processor or bank, or it can not be used for this payment.', debug_id: 'dbg-dec', details: [{ issue: 'INSTRUMENT_DECLINED' }] },
+    });
+    const err = (await authorizeHold(h.ctx, s.orderId, s.paypalOrderId).catch((e: unknown) => e)) as DomainError;
+    expect(err.code).toBe('INSTRUMENT_DECLINED');
+    expect(err.paypalDebugId).toBeTruthy(); // PayPal's debug id travels with the error (header wins over body)
+    expect(postCalls().filter((c) => c.path.endsWith('/authorize'))).toHaveLength(1); // not retried
+    expect(h.sleeps).toHaveLength(0);
+    expect((await getOrder(h.t.db, s.orderId))!.state).toBe('AWAITING_APPROVAL');
+    expect(await auditTypes(s.orderId)).toContain('HOLD_INSTRUMENT_DECLINED');
+
+    // The buyer chose another funding source in PayPal; the second authorize must not reuse the first request id.
+    await authorizeHold(h.ctx, s.orderId, s.paypalOrderId);
+    const ids = postCalls().filter((c) => c.path.endsWith('/authorize')).map((c) => c.headers['paypal-request-id']);
+    expect(ids).toEqual([paypalRequestId(s.orderId, 'authorize', 1), paypalRequestId(s.orderId, 'authorize', 2)]);
+    expect((await getOrder(h.t.db, s.orderId))!.state).toBe('HELD');
   });
 
   it('is idempotent once HELD: returns the stored authorization without calling PayPal', async () => {

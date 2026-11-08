@@ -3,18 +3,25 @@ import {
   ItemCategory,
   OrdersController,
   PaypalExperienceUserAction,
+  PaypalWalletContextShippingPreference,
   ShipmentCarrier,
 } from '@paypal/paypal-server-sdk';
 import type { Order, OrderRequest, OrderTrackerRequest } from '@paypal/paypal-server-sdk';
 import { DomainError, usd } from '@aegis/core';
 import type { Minor } from '@aegis/core';
-import { appendAudit, getOrderBundle, recordPayPalOrderId, transition, withTx } from '@aegis/db';
+import { appendAudit, countAuditOfType, getOrderBundle, recordPayPalOrderId, transition, withTx } from '@aegis/db';
 import type { OrderBundle } from '@aegis/db';
 import { hasIssue, paypalCall } from './call.ts';
 import type { PayPalContext } from './client.ts';
 
 /** PayPal honours an authorization for 3 days from creation (it stays valid, but un-guaranteed, for 29). */
 export const HONOR_PERIOD_MS = 3 * 24 * 3_600_000;
+
+/** `experience_context.brand_name`: the name the buyer sees in PayPal's checkout window (max 127 characters). */
+export const BRAND_NAME = 'AegisPay';
+
+/** Audit type written each time PayPal declines the buyer's funding source on authorize. */
+export const INSTRUMENT_DECLINED_AUDIT = 'HOLD_INSTRUMENT_DECLINED';
 
 /** Free text the LLM may write. It is length-capped here and never influences an amount. */
 export interface HoldCopy {
@@ -109,6 +116,11 @@ export function buildOrderRequest(b: OrderBundle, a: HoldAmounts, copy: HoldCopy
     paymentSource: {
       paypal: {
         experienceContext: {
+          // What the buyer sees in PayPal's window: our name (not the sandbox account's default store name), US English,
+          // and the shipping address PayPal has on file, since these are physical goods shipped to the buyer.
+          brandName: BRAND_NAME,
+          locale: 'en-US',
+          shippingPreference: PaypalWalletContextShippingPreference.GetFromFile,
           returnUrl: `${appUrl.replace(/\/+$/, '')}/approved`,
           cancelUrl: `${appUrl.replace(/\/+$/, '')}/cancelled`,
           userAction: PaypalExperienceUserAction.Continue,
@@ -249,11 +261,15 @@ export async function authorizeHold(
   let authorized: Order;
   let requestId: string | undefined;
   let debugId: string | undefined;
+  // After a decline the buyer picks another funding source in PayPal and we authorize again. That is a new attempt, so
+  // it must carry a new PayPal-Request-Id: reusing the old one could make PayPal replay the stored decline.
+  const attempt = 1 + (await countAuditOfType(ctx.db, orderRowId, INSTRUMENT_DECLINED_AUDIT));
   try {
     const res = await paypalCall<Order>({
       db: ctx.db,
       action: 'authorize',
       orderRowId,
+      attempt,
       ...(ctx.deps ? { deps: ctx.deps } : {}),
       onUnauthorized: () => ctx.handleUnauthorized(),
       run: ({ requestId: rid }) => orders(ctx).authorizeOrder({ id: paypalOrderId, paypalRequestId: rid, prefer: 'return=representation' }),
@@ -267,6 +283,26 @@ export async function authorizeHold(
         throw new DomainError('ORDER_NOT_APPROVED', 'the buyer has not approved this PayPal order yet', {
           ...(err.paypalDebugId ? { paypalDebugId: err.paypalDebugId } : {}),
           paypalName: 'ORDER_NOT_APPROVED',
+        });
+      }
+      // 422 INSTRUMENT_DECLINED: the card or bank behind the buyer's PayPal choice was refused. Retrying the same instrument
+      // cannot succeed, so this is never retried; the buyer is sent back to PayPal to choose another way to pay.
+      if (hasIssue(err, 'INSTRUMENT_DECLINED')) {
+        await withTx(
+          (tx) =>
+            appendAudit(tx, {
+              actor: 'system:payments',
+              type: INSTRUMENT_DECLINED_AUDIT,
+              entity: 'purchase_order',
+              entityId: orderRowId,
+              ...(err.paypalDebugId ? { paypalDebugId: err.paypalDebugId } : {}),
+              payload: { paypalOrderId, attempt, note: 'PayPal declined the funding source; the buyer must choose another one' },
+            }),
+          ctx.db,
+        );
+        throw new DomainError('INSTRUMENT_DECLINED', 'PayPal declined that funding source. Choose another way to pay in PayPal, then approve again.', {
+          ...(err.paypalDebugId ? { paypalDebugId: err.paypalDebugId } : {}),
+          paypalName: 'INSTRUMENT_DECLINED',
         });
       }
       if (hasIssue(err, 'ORDER_ALREADY_AUTHORIZED')) {

@@ -28,7 +28,16 @@ describe('assertSandboxBaseUrl (sandbox-only guard)', () => {
 describe('loadPayPalConfig', () => {
   it('defaults to the sandbox host and trims values', () => {
     const c = loadPayPalConfig({ PAYPAL_CLIENT_ID: ' id ', PAYPAL_CLIENT_SECRET: ' secret ', PAYPAL_WEBHOOK_ID: ' WH-1 ' });
-    expect(c).toEqual({ clientId: 'id', clientSecret: 'secret', baseUrl: SANDBOX_BASE_URL, webhookId: 'WH-1' });
+    expect(c).toEqual({ environment: 'sandbox', clientId: 'id', clientSecret: 'secret', baseUrl: SANDBOX_BASE_URL, webhookId: 'WH-1' });
+  });
+
+  it('PAYPAL_ENVIRONMENT: sandbox (any case) or unset loads; live or anything else never does', () => {
+    const base = { PAYPAL_CLIENT_ID: 'a', PAYPAL_CLIENT_SECRET: 'b' };
+    expect(loadPayPalConfig({ ...base, PAYPAL_ENVIRONMENT: 'sandbox' }).environment).toBe('sandbox');
+    expect(loadPayPalConfig({ ...base, PAYPAL_ENVIRONMENT: ' Sandbox ' }).environment).toBe('sandbox');
+    expect(loadPayPalConfig({ ...base, PAYPAL_ENVIRONMENT: '' }).baseUrl).toBe(SANDBOX_BASE_URL);
+    expect(() => loadPayPalConfig({ ...base, PAYPAL_ENVIRONMENT: 'live' })).toThrow(/sandbox-only/);
+    expect(() => loadPayPalConfig({ ...base, PAYPAL_ENVIRONMENT: 'production' })).toThrow(/sandbox-only/);
   });
 
   it('requires both credentials, and a production URL never loads', () => {

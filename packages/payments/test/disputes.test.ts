@@ -7,9 +7,12 @@ import { capture } from '../src/authorizations.ts';
 import {
   assertBundleIntegrity,
   buildEvidenceBundle,
+  bundleTarget,
   evidenceAlreadySubmitted,
   fetchDispute,
   hasProvideEvidenceLink,
+  hasSupportingInfoLink,
+  offeredResponse,
   orderStateForOutcome,
   reviewEvidenceBundle,
   submitEvidence,
@@ -69,7 +72,7 @@ async function settled() {
 }
 
 /** Settled order + a dispute PayPal opened against its capture, synced into our books (order is now DISPUTED). */
-async function disputed(o: { reason?: string; dueInMs?: number | null } = {}) {
+async function disputed(o: { reason?: string; dueInMs?: number | null; status?: string } = {}) {
   const s = await settled();
   const d = h.pp.addDispute({ captureId: s.captureId, ...o });
   const sync = await syncDispute(h.ctx, d.id);
@@ -693,5 +696,136 @@ describe('submitting evidence', () => {
     const x = await reviewed({ reason: 'SOMETHING_PAYPAL_ADDS_LATER' });
     await submitEvidence(h.ctx, x.bundleId, OWNER);
     expect(x.d.received[0]!.input).toMatchObject({ evidences: [{ evidence_type: 'OTHER' }] });
+  });
+
+  it('reads the dispute back after a provide-evidence submission and audits what PayPal now lists', async () => {
+    const x = await reviewed();
+    await submitEvidence(h.ctx, x.bundleId, OWNER);
+    const rb = (await auditRows(x.disputeId)).find((r) => r.type === 'EVIDENCE_READBACK');
+    expect(rb?.payload).toMatchObject({ bundleId: x.bundleId, target: 'provide-evidence', confirmed: true, evidences: { before: 0, after: 1 } });
+  });
+});
+
+/**
+ * A CHARGEBACK dispute that PayPal is reviewing (UNDER_REVIEW) never offers provide-evidence. The live sandbox case
+ * PP-R-EVA-10196999 offered exactly `accept_claim` and `provide_supporting_info`. The seller's answer then is supporting
+ * information, routed from PayPal's own links.
+ */
+describe('answering a dispute PayPal is reviewing (provide-supporting-info)', () => {
+  const supportingPosts = () => h.pp.seen.filter((c) => c.method === 'POST' && c.path.endsWith('/provide-supporting-info'));
+
+  async function reviewedUnderReview() {
+    const x = await disputed({ status: 'UNDER_REVIEW' });
+    const built = await buildEvidenceBundle(h.ctx, x.disputeId, NOTES, 'agent:defense');
+    if (built.status !== 'BUILT') throw new Error(`expected BUILT, got ${JSON.stringify(built)}`);
+    await reviewEvidenceBundle(h.ctx, built.bundle.id, 'reviewer@acme.test');
+    h.pp.seen.length = 0;
+    return { ...x, bundleId: built.bundle.id, bundle: built.bundle };
+  }
+
+  it('reads the offered answer from the links, with either spelling, preferring provide-evidence', () => {
+    const l = (...rels: string[]) => rels.map((rel) => ({ rel, href: 'https://x' }));
+    expect(hasSupportingInfoLink(l('provide_supporting_info'))).toBe(true);
+    expect(hasSupportingInfoLink(l('provide-supporting-info'))).toBe(true);
+    expect(hasSupportingInfoLink(l('accept_claim', 'self'))).toBe(false);
+    expect(offeredResponse(l('self', 'accept_claim', 'provide_supporting_info'))).toBe('provide-supporting-info');
+    expect(offeredResponse(l('provide_supporting_info', 'provide-evidence'))).toBe('provide-evidence');
+    expect(offeredResponse(l('self', 'accept_claim'))).toBeNull(); // accept_claim refunds: never an answer this system sends
+  });
+
+  it('tells the two bodies apart by shape', () => {
+    expect(bundleTarget({ evidences: [] })).toBe('provide-evidence');
+    expect(bundleTarget({ notes: 'x' })).toBe('provide-supporting-info');
+    expect(bundleTarget({ notes: 'x', evidences: 'not an array' })).toBeNull();
+    expect(bundleTarget({})).toBeNull();
+    expect(bundleTarget(null)).toBeNull();
+  });
+
+  it('builds a {notes} body with the same PDFs when PayPal offers only supporting info, and audits the target', async () => {
+    const x = await reviewedUnderReview();
+    expect(x.bundle.inputJson).toEqual({ notes: NOTES });
+    expect(x.bundle.files.length).toBeGreaterThan(0);
+    const rows = await auditRows(x.disputeId);
+    expect(rows.find((r) => r.type === 'EVIDENCE_BUNDLE_BUILT')?.payload).toMatchObject({ target: 'provide-supporting-info' });
+    expect(rows.find((r) => r.type === 'EVIDENCE_REVIEWED')?.payload).toMatchObject({ target: 'provide-supporting-info' });
+  });
+
+  it('sends input {notes} and the stored PDFs byte for byte, moves the order to EVIDENCE_SUBMITTED, and reads back', async () => {
+    const x = await reviewedUnderReview();
+    await submitEvidence(h.ctx, x.bundleId, OWNER);
+    expect(supportingPosts()).toHaveLength(1);
+    expect(evidencePosts()).toHaveLength(0);
+    const got = x.d.supportingInfo[0]!;
+    expect(got.input).toEqual({ notes: NOTES });
+    expect(got.files.map((f) => sha(f.bytes))).toEqual(x.bundle.files.map((f) => f.sha256));
+    expect(x.d.status).toBe('UNDER_REVIEW'); // PayPal keeps reviewing
+    expect(await state(x.orderId)).toBe('EVIDENCE_SUBMITTED');
+    const rows = await auditRows(x.disputeId);
+    expect(rows.find((r) => r.type === 'EVIDENCE_SUBMITTED')?.payload).toMatchObject({ target: 'provide-supporting-info', wasInState: 'UNDER_REVIEW', wasInStage: 'CHARGEBACK' });
+    expect(rows.find((r) => r.type === 'EVIDENCE_READBACK')?.payload).toMatchObject({ confirmed: true, supportingInfo: { before: 0, after: 1 } });
+    expect((await verifyChain(h.t.db)).ok).toBe(true);
+  });
+
+  it('a bundle attested for provide-evidence is refused once PayPal only takes supporting info: a new review must cover it', async () => {
+    const x = await reviewed();
+    x.d.status = 'UNDER_REVIEW';
+    await expect(submitEvidence(h.ctx, x.bundleId, OWNER)).rejects.toThrow(/prepared for provide-evidence, but PayPal now accepts provide-supporting-info/);
+    expect(evidencePosts()).toHaveLength(0);
+    expect(supportingPosts()).toHaveLength(0);
+  });
+
+  it('after that refusal, "draft again" builds for the action PayPal now offers (the live links were kept)', async () => {
+    const x = await reviewed(); // built and attested for provide-evidence
+    x.d.status = 'UNDER_REVIEW';
+    await expect(submitEvidence(h.ctx, x.bundleId, OWNER)).rejects.toThrow(/draft again/);
+    const again = await buildEvidenceBundle(h.ctx, x.disputeId, NOTES, 'agent:defense');
+    if (again.status !== 'BUILT') throw new Error('not built');
+    expect(bundleTarget(again.bundle.inputJson)).toBe('provide-supporting-info');
+    await reviewEvidenceBundle(h.ctx, again.bundle.id, 'reviewer@acme.test');
+    await submitEvidence(h.ctx, again.bundle.id, OWNER);
+    expect(x.d.supportingInfo).toHaveLength(1);
+  });
+
+  it('and the other way round: a supporting-info bundle is refused when PayPal asks for evidence instead', async () => {
+    const x = await reviewedUnderReview();
+    x.d.status = 'WAITING_FOR_SELLER_RESPONSE';
+    await expect(submitEvidence(h.ctx, x.bundleId, OWNER)).rejects.toThrow(/prepared for provide-supporting-info, but PayPal now accepts provide-evidence/);
+    expect(supportingPosts()).toHaveLength(0);
+  });
+
+  it('refuses outside the stages PayPal allows (an INQUIRY offers no supporting-info link)', async () => {
+    const x = await reviewedUnderReview();
+    x.d.stage = 'INQUIRY';
+    await expect(submitEvidence(h.ctx, x.bundleId, OWNER)).rejects.toThrow(/no provide-supporting-info action/);
+    expect(supportingPosts()).toHaveLength(0);
+    expect(await state(x.orderId)).toBe('DISPUTED');
+  });
+
+  it('a 5xx is not retried and the bundle stays unsubmitted (no idempotency key PayPal documents here)', async () => {
+    const x = await reviewedUnderReview();
+    h.pp.failures.push({ match: /POST \/v1\/customer\/disputes\/.+\/provide-supporting-info/, count: 1, status: 503 });
+    expect(await code(submitEvidence(h.ctx, x.bundleId, OWNER))).toBe('PAYPAL_ERROR');
+    expect(supportingPosts()).toHaveLength(1);
+    expect(h.sleeps).toHaveLength(0);
+    expect((await getEvidenceBundle(h.t.db, x.bundleId))!.submittedAt).toBeNull();
+    expect(await state(x.orderId)).toBe('DISPUTED');
+  });
+
+  it('PayPal deciding for the seller afterwards moves the order to RESOLVED_WON', async () => {
+    const x = await reviewedUnderReview();
+    await submitEvidence(h.ctx, x.bundleId, OWNER);
+    h.pp.resolveDispute(x.disputeId, 'RESOLVED_SELLER_FAVOUR');
+    const s = await syncDispute(h.ctx, x.disputeId);
+    expect(s.moved).toBe('RESOLVED_WON');
+  });
+
+  it('the integrity check holds supporting-info notes to the same limits', async () => {
+    const x = await reviewedUnderReview();
+    const { bundleSha256 } = await import('../src/evidence/pdf.ts');
+    const rehash = (inputJson: unknown): EvidenceBundleRow => ({ ...x.bundle, inputJson, sha256: bundleSha256(inputJson, x.bundle.files) });
+    const fails = (b: EvidenceBundleRow) => { try { assertBundleIntegrity(b); return null; } catch (e) { return e as DomainError; } };
+    expect(fails(rehash({ notes: '   ' }))?.message).toMatch(/supporting-info notes are empty/);
+    expect(fails(rehash({ notes: 'z'.repeat(2001) }))?.message).toMatch(/limit is 2000/);
+    expect(fails(rehash({ notes: 'z'.repeat(2000) }))).toBeNull();
   });
 });

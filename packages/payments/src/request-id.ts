@@ -13,7 +13,8 @@ export type PayPalAction =
   | 'verify_webhook'
   | 'simulate_event'
   | 'dispute_get'
-  | 'dispute_evidence';
+  | 'dispute_evidence'
+  | 'dispute_supporting_info';
 
 /**
  * Deterministic `PayPal-Request-Id`: sha256(orderRowId:action:attempt), 64 hex chars (PayPal allows up to 108).

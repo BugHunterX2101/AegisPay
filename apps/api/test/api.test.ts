@@ -517,6 +517,22 @@ describe('disputes', () => {
     expect((await v.get('/api/audit/verify')).json()).toMatchObject({ ok: true });
   });
 
+  it('a chargeback PayPal is reviewing: the reviewer sees the notes and the target, and it goes out as supporting info', async () => {
+    const v = await visitor();
+    const o = await settledOrder(v);
+    const pp = h.pp.addDispute({ captureId: o.captureId, reason: 'MERCHANDISE_OR_SERVICE_NOT_RECEIVED', status: 'UNDER_REVIEW' });
+    expect((await v.post(`/api/disputes/${pp.id}/sync`)).statusCode).toBe(200);
+    const plan = await v.post(`/api/disputes/${pp.id}/plan`);
+    expect(plan.statusCode, plan.body).toBe(201);
+    const built = plan.json<{ bundle: { id: string; notes: string | null; target: string } }>();
+    expect(built.bundle.target).toBe('provide-supporting-info');
+    expect(built.bundle.notes).toContain('1Z999AA10123456784'); // the {notes} body is shown, not hidden
+    const sent = await v.post(`/api/disputes/${pp.id}/submit`, { bundleId: built.bundle.id, attested: true });
+    expect(sent.statusCode, sent.body).toBe(200);
+    expect(pp.supportingInfo).toHaveLength(1);
+    expect(pp.received).toHaveLength(0);
+  });
+
   it('refuses a malformed dispute id and a plan for a dispute that was never synced', async () => {
     const v = await visitor();
     expect((await v.get('/api/disputes/a%20b')).statusCode).toBe(400);

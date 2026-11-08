@@ -302,6 +302,25 @@ describe('runPollOpen', () => {
     expect(posts('/authorize')[0]!.path).toContain(approved.paypalOrderId);
   });
 
+  it('never re-authorizes an order whose funding source PayPal declined, even if PayPal still calls it APPROVED', async () => {
+    const s = await awaitingApproval();
+    h.pp.approve(s.paypalOrderId);
+    h.pp.failures.push({
+      match: /POST \/v2\/checkout\/orders\/.+\/authorize$/,
+      count: 1,
+      status: 422,
+      body: { name: 'UNPROCESSABLE_ENTITY', message: 'declined', debug_id: 'dbg-dec', details: [{ issue: 'INSTRUMENT_DECLINED' }] },
+    });
+    h.pp.seen.length = 0;
+    h.clock.offsetMs = 10 * 60_000;
+    await runPollOpen(deps); // first tick meets the decline and records it
+    await runPollOpen(deps); // later ticks leave it to the buyer
+    await runPollOpen(deps);
+    expect(posts('/authorize')).toHaveLength(1);
+    expect(await state(s.orderId)).toBe('AWAITING_APPROVAL');
+    expect(await auditRows(s.orderId, 'HOLD_INSTRUMENT_DECLINED')).toHaveLength(1);
+  });
+
   it('leaves a fresh approval to the approve route (inside the grace period)', async () => {
     const s = await awaitingApproval();
     h.pp.approve(s.paypalOrderId);

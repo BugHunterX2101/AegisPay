@@ -182,7 +182,7 @@ export async function acceptedEvidenceCall(
   const r = await db.query<{ seq: bigint; paypal_request_id: string | null; paypal_debug_id: string | null }>(
     `select seq, paypal_request_id, paypal_debug_id from audit_event
       where entity = 'evidence_bundle' and entity_id = $1 and type = 'PAYPAL_CALL'
-        and payload->>'action' = 'dispute_evidence' and payload->>'ok' = 'true'
+        and payload->>'action' in ('dispute_evidence', 'dispute_supporting_info') and payload->>'ok' = 'true'
       order by seq desc limit 1`,
     [bundleId],
   );

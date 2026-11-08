@@ -100,6 +100,12 @@ export async function listAuditForEntity(db: Queryable, entityId: string, limit 
   return r.rows.map(toAudit);
 }
 
+/** How many audit rows of one type an entity has (e.g. declined funding attempts on an order). */
+export async function countAuditOfType(db: Queryable, entityId: string, type: string): Promise<number> {
+  const r = await db.query<{ n: number }>('select count(*)::int as n from audit_event where entity_id = $1 and type = $2', [entityId, type]);
+  return r.rows[0]?.n ?? 0;
+}
+
 /** Events after `seq`, oldest first: how a reconnecting stream catches up from Last-Event-ID. */
 export async function listAuditAfter(db: Queryable, seq: bigint, limit = 200): Promise<AuditRow[]> {
   const r = await db.query<AuditDbRow>(`select ${AUDIT_COLUMNS} from audit_event where seq > $1 order by seq limit $2`, [seq, limit]);

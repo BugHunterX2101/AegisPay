@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { ModuleRegistry, colorSchemeVariable, themeQuartz } from 'ag-grid-community';
-import type { ColDef, GetRowIdParams } from 'ag-grid-community';
+import type { ColDef, GetRowIdParams, ProcessCellForExportParams } from 'ag-grid-community';
 import { AllEnterpriseModule, LicenseManager } from 'ag-grid-enterprise';
 import { AgGridReact } from 'ag-grid-react';
 import type { CustomCellRendererProps, CustomDetailCellRendererProps } from 'ag-grid-react';
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { api, errorMessage } from '../api.ts';
 import { CAPTURED_STATES, HELD_STATES, VOIDED_STATES, endOfDay, formatDay, formatStamp, humanize, money, remaining, shortHash, sumMinor, useAppNow } from '../format.ts';
 import { useStore } from '../store.ts';
@@ -55,11 +55,15 @@ const isNarrow = () => NARROW.matches;
 const FIT_ROWS = 8;
 const DISPUTE_STATES = new Set(['DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED']);
 
+/** The pinned foot row is not an order: renderers that act on an order skip it. */
+const TOTAL_ROW_ID = '__ledger_total';
+const isOrder = (p: { node?: { rowPinned?: unknown } | null; data?: OrderRow | undefined }) => !!p.data && !p.node?.rowPinned;
+
 function ActionsCell(p: CustomCellRendererProps<OrderRow>) {
   const toast = useStore((s) => s.toast);
   const [busy, setBusy] = useState(false);
   const o = p.data;
-  if (!o) return null;
+  if (!o || !isOrder(p)) return null;
   const ctx = p.context as GridCtx;
 
   const post = async (path: string, ok: string) => {
@@ -100,7 +104,7 @@ function ActionsCell(p: CustomCellRendererProps<OrderRow>) {
 function SlaCell(p: CustomCellRendererProps<OrderRow>) {
   const now = useAppNow();
   const o = p.data;
-  if (!o || (o.state !== 'HELD' && o.state !== 'IN_TRANSIT')) return null;
+  if (!o || !isOrder(p) || (o.state !== 'HELD' && o.state !== 'IN_TRANSIT')) return null;
   const r = remaining(endOfDay(o.deliverBy), now);
   if (!r) return null;
   const auth = remaining(o.authExpiresAt, now);
@@ -114,7 +118,7 @@ function SlaCell(p: CustomCellRendererProps<OrderRow>) {
 
 function GateCell(p: CustomCellRendererProps<OrderRow>) {
   const o = p.data;
-  if (!o || o.gatePass == null) return null;
+  if (!o || !isOrder(p) || o.gatePass == null) return null;
   return (
     <span className={`gate ${o.gatePass ? 'pass' : 'fail'}`} title={`decision sha256 ${o.decisionSha256 ?? ''}`}>
       {o.gatePass ? '✓ passed' : '✗ blocked'} <small>{shortHash(o.decisionSha256)}</small>
@@ -191,19 +195,43 @@ export function CommandGrid(ctx: GridCtx) {
         minWidth: 220,
         flex: 2,
       },
-      { headerName: 'State', field: 'state', cellRenderer: (p: CustomCellRendererProps<OrderRow>) => (p.data ? <StateChip state={p.data.state} /> : null), width: 190 },
+      { headerName: 'State', field: 'state', cellRenderer: (p: CustomCellRendererProps<OrderRow>) => (isOrder(p) ? <StateChip state={p.data!.state} /> : null), width: 190 },
       { headerName: 'Hold', field: 'amountMinor', valueFormatter: (p) => (p.data ? money(p.data.amountMinor, p.data.currency) : ''), width: 90, type: 'rightAligned' },
       { headerName: 'Supplier', field: 'domain', width: 180 },
-      { headerName: 'Gate', cellRenderer: GateCell, width: 150 },
+      // The value getter is what the CSV export writes; the renderer is what the screen shows.
+      { headerName: 'Gate', colId: 'gate', valueGetter: (p) => (p.data?.gatePass == null ? '' : `${p.data.gatePass ? 'passed' : 'blocked'} ${p.data.decisionSha256 ?? ''}`.trim()), cellRenderer: GateCell, width: 150 },
       { headerName: 'Deliver by', field: 'deliverBy', valueFormatter: (p) => formatDay(p.value as string | null), width: 140 },
-      { headerName: 'Timer', cellRenderer: SlaCell, width: 220, enableCellChangeFlash: false },
-      { headerName: 'Tracking', valueGetter: (p) => (p.data?.trackingNumber ? `${p.data.carrier ?? ''} ${p.data.trackingNumber}` : ''), width: 190 },
+      { headerName: 'Timer', colId: 'timer', cellRenderer: SlaCell, width: 220, enableCellChangeFlash: false },
+      { headerName: 'Tracking', colId: 'tracking', valueGetter: (p) => (p.data?.trackingNumber ? `${p.data.carrier ?? ''} ${p.data.trackingNumber}` : ''), width: 190 },
       { headerName: 'PayPal order', field: 'paypalOrderId', width: 190 },
-      { headerName: 'Dispute', valueGetter: (p) => (p.data?.disputeId ? `${p.data.disputeId} · ${humanize(p.data.disputeStatus)}` : ''), width: 250 },
-      { headerName: '', cellRenderer: ActionsCell, width: 230, pinned: narrow ? null : 'right', sortable: false, enableCellChangeFlash: false },
+      { headerName: 'Authorization', field: 'authorizationId', width: 170, hide: true },
+      { headerName: 'Capture', field: 'captureId', width: 170, hide: true },
+      { headerName: 'Dispute', colId: 'dispute', valueGetter: (p) => (p.data?.disputeId ? `${p.data.disputeId} · ${humanize(p.data.disputeStatus)}` : ''), width: 250 },
+      { headerName: '', colId: 'actions', cellRenderer: ActionsCell, width: 230, pinned: narrow ? null : 'right', sortable: false, enableCellChangeFlash: false },
     ],
     [narrow],
   );
+
+  // Ledger foot: money held or captured right now (the same figures as the strip above, so they cannot disagree).
+  const totalRow = useMemo<OrderRow[]>(() => {
+    if (rows.length === 0) return [];
+    const committed = rows.filter((r) => HELD_STATES.includes(r.state) || CAPTURED_STATES.includes(r.state));
+    const sum = committed.reduce((a, r) => a + BigInt(r.amountMinor), 0n);
+    return [{ id: TOTAL_ROW_ID, title: `Held + captured · ${committed.length} of ${rows.length} orders`, amountMinor: sum.toString(), currency: rows[0]!.currency } as OrderRow];
+  }, [rows]);
+
+  const grid = useRef<AgGridReact<OrderRow>>(null);
+  // An audit-friendly export of what is on screen, including the PayPal ids, the decision hash and the foot row.
+  const exportCsv = () =>
+    grid.current?.api.exportDataAsCsv({
+      fileName: `aegispay-ledger-${new Date().toISOString().slice(0, 10)}.csv`,
+      allColumns: true,
+      columnKeys: columnDefs.map((c) => c.colId ?? c.field).filter((k): k is string => !!k && k !== 'actions' && k !== 'timer'),
+      processCellCallback: (p: ProcessCellForExportParams<OrderRow>) => {
+        if (p.column.getColId() === 'deliverBy' || p.column.getColId() === 'amountMinor') return p.formatValue(p.value) as string;
+        return p.value == null ? '' : String(p.value);
+      },
+    });
 
   return (
     <section aria-label="Command grid">
@@ -212,17 +240,21 @@ export function CommandGrid(ctx: GridCtx) {
         <span>Captured <strong>{sumMinor(rows, CAPTURED_STATES)}</strong></span>
         <span>Voided <strong>{sumMinor(rows, VOIDED_STATES)}</strong></span>
         <span>{rows.length} order{rows.length === 1 ? '' : 's'}</span>
+        <button className="sm" onClick={exportCsv} disabled={rows.length === 0} data-testid="export-csv">Export CSV</button>
       </div>
       <div className="grid-wrap" data-testid="grid" data-fit={fit ? 'rows' : 'scroll'}>
         <AgGridReact<OrderRow>
+          ref={grid}
           domLayout={fit ? 'autoHeight' : 'normal'}
           theme={theme}
           rowData={rows}
+          pinnedBottomRowData={totalRow}
           columnDefs={columnDefs}
           defaultColDef={{ resizable: true, sortable: true, enableCellChangeFlash: true, suppressHeaderMenuButton: true }}
           getRowId={(p: GetRowIdParams<OrderRow>) => p.data.id}
           context={ctx}
           masterDetail
+          isRowMaster={(d: OrderRow | undefined) => !!d && d.id !== TOTAL_ROW_ID}
           detailCellRenderer={AuditDetail}
           detailRowAutoHeight
           noRowsOverlayComponent={NoOrders}

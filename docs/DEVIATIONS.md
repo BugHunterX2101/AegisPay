@@ -1,6 +1,6 @@
 # Deviations from the spec, and what is still unconfirmed
 
-Last verified: 2026-11-06. "Verified" means observed against the real PayPal sandbox
+Last verified: 2026-11-08. "Verified" means observed against the real PayPal sandbox
 (`pnpm test:sandbox`, plus the one-off probes noted below), not against our local PayPal double.
 
 ## 1. Deviations from the spec
@@ -50,7 +50,7 @@ None of these can be settled without a buyer-approved transaction and a buyer-fi
 
 | Item | What we do today | How it fails if we guessed wrong |
 |------|------------------|----------------------------------|
-| Spelling of the provide-evidence link `rel` | Normalise `_` and `-`, so `provide_evidence` and `provide-evidence` both match | Submit refuses with "no provide-evidence link" and sends nothing |
+| Spelling of the provide-evidence link `rel` | Normalise `_` and `-`, so `provide_evidence` and `provide-evidence` both match. **Observed 2026-11-08:** the live sandbox spells action rels with an underscore (`accept_claim`, `provide_supporting_info` on PP-R-EVA-10196999), so the normalisation is needed | Submit refuses with "no provide-evidence link" and sends nothing |
 | How `evidences[].documents` refers to uploaded files | Our best reading of the docs | PayPal rejects the POST with a 4xx; nothing is submitted |
 | Whether the multipart `input` part's filename (`input.json`) is accepted | Sent as `application/json` with that filename | Same 4xx |
 | Shape of `refund_ids` on a dispute | Parsed defensively | Refund linkage on a dispute is not shown |
@@ -122,7 +122,14 @@ None of these can be settled without a buyer-approved transaction and a buyer-fi
 
 - **What happened.** A buyer-filed `MERCHANDISE_OR_SERVICE_NOT_RECEIVED` dispute (`PP-R-EVA-10196999`) arrived by a real, signature-verified `CUSTOMER.DISPUTE.CREATED` webhook and moved the order to `DISPUTED`. PayPal put it straight into `UNDER_REVIEW` / `CHARGEBACK` (channel `INTERNAL`) with no seller response due. The only action it offered was `provide_supporting_info`; it never offered `provide_evidence`.
 - **What the product did.** The evidence bundle was built from the audit log, a named human read it and attested to its hash (`EVIDENCE_REVIEWED`), and the submit step then re-read the dispute from PayPal and refused with 409 `BAD_STATE` (`UNDER_REVIEW`, not `WAITING_FOR_SELLER_RESPONSE`). Nothing was sent to PayPal. This is the designed behaviour: `provide-evidence` is only called when PayPal's live answer says the seller's turn is open and the link is offered.
-- **Decision.** Not to add a `provide-supporting-info` path. It is a different PayPal write with a different payload that the TDD does not specify, and the attestation covered the `provide-evidence` flow. The submission step therefore stays unproven against PayPal's sandbox; it is covered by the payments tests against a local PayPal-shaped server (`packages/payments/test/disputes.test.ts`).
+- **Decision (2026-11-07).** Not to add a `provide-supporting-info` path. It is a different PayPal write with a different payload that the TDD does not specify, and the attestation covered the `provide-evidence` flow. The submission step therefore stays unproven against PayPal's sandbox; it is covered by the payments tests against a local PayPal-shaped server (`packages/payments/test/disputes.test.ts`).
+- **Reversed (2026-11-08).** PayPal's Disputes v1 reference says that while a CHARGEBACK, PRE_ARBITRATION or ARBITRATION dispute is `UNDER_REVIEW`, `provide-supporting-info` is the seller's only answer (`provide-evidence` exists only in `WAITING_FOR_SELLER_RESPONSE`). The live case still offers exactly `accept_claim` and `provide_supporting_info`, and no `require_evidence` link, so the sandbox-only status switch cannot be used on it. Refusing every time meant the product could never answer the most common sandbox outcome. What changed, and what did not:
+  - The answer is chosen from PayPal's live links, never from the stage alone: `provide-evidence` when offered, otherwise `provide-supporting-info`. `accept_claim` is never called (it refunds the buyer; that is a human's call in PayPal).
+  - The body follows PayPal's schema and its own sample: a multipart `input` part `{"notes": ...}` plus the same PDFs (`file1`...). The bundle's hashed `input` shape decides which endpoint it is for (`bundleTarget`), so a human's attestation to the hash also fixes which write it authorises. A bundle attested for one endpoint is refused if PayPal now offers the other ("draft again"), so a fresh review always covers what is sent.
+  - Same guarantees as before: live GET immediately before the POST, row lock, no retry on a 5xx or network error (PayPal documents no idempotency key for dispute POSTs), crash-window recovery (`dispute_supporting_info` is recognised by `acceptedEvidenceCall`).
+  - After a committed submission the dispute is read back from PayPal and what it now lists is audited (`EVIDENCE_READBACK`: counts of `evidences[]` / `supporting_info[]` before and after, status, stage, offered actions). A failed read-back never undoes a submission.
+  - The order moves `DISPUTED -> EVIDENCE_SUBMITTED` either way, so PayPal's later outcome maps to `RESOLVED_WON/LOST`.
+  - Tests: `disputes.test.ts` ("answering a dispute PayPal is reviewing"), against a PayPal double that now offers the live-observed links.
 
 ## 5g. Front-end redesign: decisions that go beyond the TDD
 
@@ -133,10 +140,39 @@ None of these can be settled without a buyer-approved transaction and a buyer-fi
 - **Guideline audit.** The page was checked against the Vercel Web Interface Guidelines. Fixed: unlabeled mandate input, an accessible name that differed from its visible text, an unnamed table header, missing `name`/`autocomplete`/`spellCheck` on form fields, placeholder ellipses, `overscroll-behavior` on dialogs and the drawer, `translate="no"` on the brand name, and `dateTime` on feed times. Left as is on purpose: sentence-case buttons (the house voice), and the immediate "Cancel" on an order that has no hold yet.
 - **Known limit.** The main script chunk is about 3.2 MB (914 KB gzipped), mostly AG Grid Enterprise. It is not split further.
 
+## 5h. Review of the 2026-11-08 improvement list: what was built, what was not, and why
+
+Each claim was checked against the code, PayPal's own documents (`commands/doctor.md` in github.com/paypal/AI-Toolkit, the Disputes v1 OpenAPI schema, the authorization docs) or a live sandbox call before deciding.
+
+| Proposal | Decision | Evidence |
+|---|---|---|
+| Route dispute answers by HATEOAS links (INQUIRY vs CHARGEBACK) | **Built** | See 5f. Live dispute offers only `accept_claim` / `provide_supporting_info` |
+| Read-back after submitting evidence | **Built** (`EVIDENCE_READBACK`) | Records what PayPal lists; it never claims more than that |
+| `/paypal:doctor`: separate 422 `INSTRUMENT_DECLINED` | **Built** | `authorizeHold` maps it to `INSTRUMENT_DECLINED` (422), never retried, audited (`HOLD_INSTRUMENT_DECLINED`); the next authorize uses attempt n+1, so a new `PayPal-Request-Id` (the old one could replay the stored decline). Worker and webhook backstop treat it as "wait for the buyer". The dialog sends the buyer back to PayPal. Live: `declined.sandbox.test.ts` (sandbox `PayPal-Mock-Response` returns 422 with `details[].issue = INSTRUMENT_DECLINED`) |
+| `/paypal:doctor`: `findEligibleMethods()` before rendering | **Built** | `PayPalApprove.tsx` |
+| `/paypal:doctor`: `PAYPAL_ENVIRONMENT` switch | **Built** | `loadPayPalConfig` derives the base URL from it; only `sandbox` (or unset) loads, `live` stops the process. The browser's SDK environment and checkout host come from the session |
+| Checkout brand, locale, shipping preference | **Built** | `brand_name: "AegisPay"` (the product is not an MCP server, so not "AegisPay MCP"), `locale: en-US`, `shipping_preference: GET_FROM_FILE`. Accepted live (HTTP 200) |
+| AG Grid pinned foot row and CSV export | **Built** | Foot row = money held + captured (same figures as the strip). CSV includes PayPal order, authorization, capture ids and decision hash |
+| v6 rules: `{ orderId }`, lowercase `data.orderId`, invoked promise to `start()`, `onError`/`onCancel`, `async` script | Already true | `start()` gets `Promise.resolve({ orderId })`; `onApprove` does not read `orderID`; the loader injects the script dynamically (async by default) |
+| Retry 5xx with the same `PayPal-Request-Id`; 429 backoff; log every `debug_id` | Already true | `call.ts`: 1s/4s/10s and 10s/30s with jitter; `debug_id` on every `PAYPAL_CALL` audit row |
+| Webhook: acknowledge fast, process async, dedupe `event_id` | Already true | Store-then-200; the worker verifies and processes; the event id is the key |
+| Integer-cent pre-flight validator against `AMOUNT_MISMATCH`, SKU ≤ 127 | Already true | Money is `bigint` minor units end to end; totals recomputed and PayPal's echo checked; SKU and title capped at 127 |
+| Hydrate from the capture response, not a re-fetch | Already true | `capture` uses the `return=representation` response |
+| 115% over-capture, honor/expiry markers | Not needed | Capture is always exactly the authorized amount (`finalCapture: true`), and the proof gate checks the live authorization amount. The real ceiling is 115% **or** +$75, whichever is less. Honor end and expiry are stored and shown in the grid timer |
+| Webhook-first dispute hydration | Already true | The live dispute arrived by a verified `CUSTOMER.DISPUTE.CREATED` webhook. A "simulated dispute" toggle was not added: the product does not show simulated PayPal state |
+| `PayPal-Request-Id` on every POST | Partly, justified | Sent on every Orders/Payments write. PayPal documents no idempotency header for dispute POSTs, tracking, or webhook verification. Those are protected instead by row locks, the `pushed_to_paypal_at` stamp, and being read-only respectively, and are never blindly retried |
+| Subscriptions lifecycle checks | Not applicable | The product has no subscription code. A feature was not added just to satisfy a checker |
+| Three-way liability with Payouts-funded "agent-fault insurance" | Not built | The token has the payouts scope, but suppliers are not PayPal parties here (one payee: our sandbox merchant), so "make the merchant whole" has no real counterparty and would be simulated. A fault classifier would need ground truth the system does not have. The regulatory claims in the proposal could not be verified |
+| Claims-ratio and expected-value pricing via Transaction Search | Not possible | The app's token has no `reporting/search` scope, and one dispute gives no meaningful ratio |
+| WebAuthn co-signing, Bryntum timeline, in-browser chain recompute, red-team panel | Deferred | Scope versus the 12 Nov deadline. The hash chain is verified server-side (`/api/audit/verify`, nightly) |
+| Inline quantity editing in the grid | Rejected | A quantity is part of the gated decision (its hash is attested). Editing it in the grid would bypass the gatekeeper |
+| Shared demo state (one judge's reset clears another's data) | Known limit | `POST /api/demo/reset` and the demo clock are global (5b). The audit chain survives a reset. Nothing automated resets the hosted demo (the nightly workflow is read-only); `pnpm seed` and the Judge Mode reset button do, and one of them cleared the 2026-11-07 run's rows |
+
 ## 6. What is needed from the owner
 
-1. A sandbox **buyer** login (or approve one order manually) so capture, refund and dispute flows can run against the real sandbox.
-2. A **buyer-filed sandbox dispute** on that transaction, to settle the evidence items in section 3.
-3. A **public HTTPS URL** for the webhook listener (a Render deploy) to verify signatures and delivery ids.
+1. ~~A sandbox **buyer** login (or approve one order manually)~~ Done on 2026-11-07: order `1DD80013YX7168537` was buyer-approved, authorized (`9RT36463D57941302`) and captured (`6GK74474NS2133130`). IDs confirmed by GET at PayPal on 2026-11-08 ([SANDBOX_VERIFICATION.md](SANDBOX_VERIFICATION.md)).
+2. ~~A **buyer-filed sandbox dispute**~~ Done: PP-R-EVA-10196999 (see 5f). The hosted demo's order rows were later cleared by a Judge Mode reset (the audit chain still verifies, 547 rows). That is why the new supporting-info path has not yet been exercised live: it needs a disputed order in the ledger, which means a new buyer-approved order and a new buyer-filed dispute.
+3. ~~A **public HTTPS URL** for the webhook listener~~ Done: the Render deploy; deliveries are signature-verified there.
 4. ~~The Channel3 API key and an LLM key~~ Provided and verified live (`pnpm test:sandbox`). Without them the agent routes answer `AGENT_UNAVAILABLE` rather than inventing results. Please confirm the second pasted string was the Channel3 key.
 5. **Rotate or revoke** the GitHub token, the PayPal sandbox secret and the Groq key that were pasted in chat, after the hackathon.
+6. To prove `provide-supporting-info` live: a new buyer-approved order on the hosted demo, then a buyer-filed dispute on it from the sandbox buyer account (PayPal's sandbox dispute dashboard). Do not run `pnpm seed` or press "Reset demo" on the hosted demo until it has been submitted.

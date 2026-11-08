@@ -41,7 +41,7 @@ Orders, authorizations, captures and refunds go through `@paypal/paypal-server-s
 | Payments v2: show captured payment | Reconcile on webhook | `packages/payments/src/webhooks/process.ts` |
 | Webhooks: verify-webhook-signature, certificate download | Verify every delivery (online postback, plus an offline certificate check) | `packages/payments/src/webhooks/verify-postback.ts`, `verify-offline.ts` |
 | Webhooks: simulate-event | Prove the webhook path against the live sandbox | `packages/payments/src/webhooks/simulate.ts` |
-| Customer Disputes v1: show dispute, provide evidence | Dispute defense | `packages/payments/src/disputes.ts` |
+| Customer Disputes v1: show dispute, provide evidence, provide supporting info | Dispute defense. The answer is chosen from the dispute's live links: evidence when PayPal asks for it, supporting info while PayPal reviews a chargeback. The dispute is read back afterwards | `packages/payments/src/disputes.ts` |
 
 Every write carries a deterministic `PayPal-Request-Id` derived from the order and the action (`packages/payments/src/request-id.ts`), so a retry or two concurrent callers converge on one PayPal operation.
 
@@ -64,6 +64,10 @@ packages/jobs        Queue names, payload schemas, sender.
 - **Idempotent and concurrent-safe.** Order state changes are compare-and-set in Postgres; PayPal writes use deterministic request ids.
 
 Decisions that differ from the technical design, and why, are recorded in [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md).
+
+## Sandbox verification
+
+[`docs/SANDBOX_VERIFICATION.md`](docs/SANDBOX_VERIFICATION.md) lists what has been observed against the real PayPal sandbox, with IDs you can look up: a buyer-approved order, its authorization and capture, the buyer's chargeback dispute and the signature-verified webhook trail, plus a live `INSTRUMENT_DECLINED` check. It also includes a line-by-line review against PayPal's `/paypal:doctor` checklist (labelled as a manual review, not the command's output), and says which paths are covered only by the local PayPal double.
 
 ## Judge Mode
 

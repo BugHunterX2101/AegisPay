@@ -65,6 +65,8 @@ export interface Disp {
   outcomeCode: string | undefined;
   /** what provide-evidence delivered, byte for byte */
   received: { input: unknown; files: MultipartPart[] }[];
+  /** what provide-supporting-info delivered, byte for byte */
+  supportingInfo: { input: unknown; files: MultipartPart[] }[];
 }
 
 export interface PayPalServer {
@@ -77,7 +79,7 @@ export interface PayPalServer {
   /** Accept a provide-evidence POST whatever the dispute status is, so only our own locking can stop a duplicate. */
   acceptDuplicateEvidence: boolean;
   /** Create a dispute against a capture we made. Defaults to the seller's turn to respond. */
-  addDispute(o: { id?: string; captureId: string; reason?: string; status?: string; dueInMs?: number | null }): Disp;
+  addDispute(o: { id?: string; captureId: string; reason?: string; status?: string; stage?: string; dueInMs?: number | null }): Disp;
   /** PayPal deciding the dispute. */
   resolveDispute(id: string, outcomeCode: string): void;
   seen: SeenCall[];
@@ -178,11 +180,12 @@ export async function startPayPalServer(): Promise<PayPalServer> {
         id: o.id ?? `PP-D-${++seq}`,
         reason: o.reason ?? 'MERCHANDISE_OR_SERVICE_NOT_RECEIVED',
         status: o.status ?? 'WAITING_FOR_SELLER_RESPONSE',
-        stage: 'CHARGEBACK',
+        stage: o.stage ?? 'CHARGEBACK',
         dueDate: o.dueInMs === null ? undefined : new Date(Date.now() + (o.dueInMs ?? 10 * 86_400_000)).toISOString(),
         transactionIds: [o.captureId],
         outcomeCode: undefined,
         received: [],
+        supportingInfo: [],
       };
       disputes.set(d.id, d);
       return d;
@@ -210,6 +213,9 @@ export async function startPayPalServer(): Promise<PayPalServer> {
 
   const authView = (a: Auth) => ({ id: a.id, status: a.status, amount: a.amount, create_time: a.create_time, expiration_time: a.expiration_time });
 
+  /** Disputes v1: supporting info only while PayPal reviews a CHARGEBACK, PRE_ARBITRATION or ARBITRATION case. */
+  const supportingInfoOpen = (d: Disp) => d.status === 'UNDER_REVIEW' && ['CHARGEBACK', 'PRE_ARBITRATION', 'ARBITRATION'].includes(d.stage);
+
   const disputeView = (d: Disp) => ({
     dispute_id: d.id,
     reason: d.reason,
@@ -218,10 +224,20 @@ export async function startPayPalServer(): Promise<PayPalServer> {
     ...(d.dueDate ? { seller_response_due_date: d.dueDate } : {}),
     disputed_transactions: d.transactionIds.map((t) => ({ seller_transaction_id: t })),
     ...(d.outcomeCode ? { dispute_outcome: { outcome_code: d.outcomeCode } } : {}),
+    evidences: d.received.flatMap((r) => ((r.input as { evidences?: unknown[] })?.evidences ?? []).map(() => ({ source: 'SUBMITTED_BY_SELLER' }))),
+    supporting_info: d.supportingInfo.map(() => ({ source: 'SUBMITTED_BY_SELLER' })),
     links: [
       { href: `${self.baseUrl}/v1/customer/disputes/${d.id}`, rel: 'self', method: 'GET' },
       ...(d.status === 'WAITING_FOR_SELLER_RESPONSE' || self.alwaysOfferProvideEvidence
         ? [{ href: `${self.baseUrl}/v1/customer/disputes/${d.id}/provide-evidence`, rel: self.provideEvidenceRel, method: 'POST' }]
+        : []),
+      // Observed on the live sandbox (PP-R-EVA-10196999, 2026-11-08): an UNDER_REVIEW CHARGEBACK offers exactly these two,
+      // spelled with underscores.
+      ...(supportingInfoOpen(d)
+        ? [
+            { href: `${self.baseUrl}/v1/customer/disputes/${d.id}/accept-claim`, rel: 'accept_claim', method: 'POST' },
+            { href: `${self.baseUrl}/v1/customer/disputes/${d.id}/provide-supporting-info`, rel: 'provide_supporting_info', method: 'POST' },
+          ]
         : []),
     ],
   });
@@ -400,11 +416,35 @@ export async function startPayPalServer(): Promise<PayPalServer> {
       if (!r) return err(404, 'RESOURCE_NOT_FOUND', 'The specified resource does not exist.', [{ issue: 'INVALID_RESOURCE_ID' }]);
       return { status: 200, body: { id: r.id, status: r.status, amount: r.amount } };
     }
-    m = /^(GET|POST) \/v1\/customer\/disputes\/([^/]+)(?:\/(provide-evidence))?$/.exec(key);
+    m = /^(GET|POST) \/v1\/customer\/disputes\/([^/]+)(?:\/(provide-evidence|provide-supporting-info))?$/.exec(key);
     if (m) {
       const d = disputes.get(m[2]!);
       if (!d) return err(404, 'RESOURCE_NOT_FOUND', 'The specified resource does not exist.', [{ issue: 'INVALID_RESOURCE_ID' }]);
       if (m[1] === 'GET') return { status: 200, body: disputeView(d) };
+      if (m[3] === 'provide-supporting-info') {
+        // Documented: CHARGEBACK / PRE_ARBITRATION / ARBITRATION only, notes 1..2000, the same file limits. The issue names
+        // are modelled, not copied from PayPal. Status does not change: PayPal keeps reviewing.
+        if (!supportingInfoOpen(d)) return unprocessable('ACTION_NOT_ALLOWED_IN_CURRENT_STAGE');
+        const parts = parseMultipart(String(headers['content-type'] ?? ''), rawBuf);
+        if (!parts) return err(400, 'INVALID_REQUEST', 'Request is not well-formed, syntactically incorrect, or violates schema.');
+        const inputPart = parts.find((p) => p.name === 'input');
+        if (!inputPart || !/^application\/json/i.test(inputPart.contentType ?? '')) return err(400, 'INVALID_REQUEST', 'Request is not well-formed, syntactically incorrect, or violates schema.', [{ issue: 'MISSING_INPUT_PART' }]);
+        let input: any;
+        try {
+          input = JSON.parse(inputPart.bytes.toString('utf8'));
+        } catch {
+          return err(400, 'INVALID_REQUEST', 'Request is not well-formed, syntactically incorrect, or violates schema.', [{ issue: 'MALFORMED_INPUT_JSON' }]);
+        }
+        if (typeof input?.notes !== 'string' || input.notes.length < 1 || input.notes.length > 2000) return unprocessable('INVALID_NOTES');
+        const files = parts.filter((p) => p.name !== 'input');
+        if (files.length > 3) return unprocessable('TOO_MANY_FILES');
+        for (const f of files) {
+          if (!ALLOWED_EVIDENCE_EXT.some((x) => (f.filename ?? '').toLowerCase().endsWith(x))) return unprocessable('UNSUPPORTED_FILE_TYPE');
+          if (f.bytes.byteLength >= 10 * 1024 * 1024) return unprocessable('FILE_TOO_LARGE');
+        }
+        d.supportingInfo.push({ input, files });
+        return { status: 200, body: { links: [{ href: `${self.baseUrl}/v1/customer/disputes/${d.id}`, rel: 'self', method: 'GET' }] } };
+      }
       if (m[3] !== 'provide-evidence') return err(404, 'RESOURCE_NOT_FOUND', `No route for ${key}`);
 
       // The documented rules for provide-evidence. The issue names below are modelled, not copied from PayPal.

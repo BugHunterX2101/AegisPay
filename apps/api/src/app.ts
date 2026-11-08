@@ -27,6 +27,7 @@ export interface BuildAppOptions {
   secureCookies: boolean;
   judgeMode: boolean;
   paypalClientId: string;
+  paypalEnv?: 'sandbox';
   /** Requests per minute per client for /api routes (the webhook and the stream are exempt). */
   rateLimitMax?: number;
   /** SSE heartbeat comment interval. */
@@ -76,6 +77,7 @@ export async function buildApp(o: BuildAppOptions): Promise<FastifyInstance> {
     secureCookies: o.secureCookies,
     judgeMode: o.judgeMode,
     paypalClientId: o.paypalClientId,
+    ...(o.paypalEnv ? { paypalEnv: o.paypalEnv } : {}),
   });
 
   app.get('/healthz', { config: { rateLimit: false } }, async () => {

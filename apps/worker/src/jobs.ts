@@ -2,6 +2,7 @@ import { DomainError } from '@aegis/core';
 import type { Clock } from '@aegis/core';
 import {
   appendAudit,
+  countAuditOfType,
   getFulfillment,
   getOrder,
   hasAuditEvent,
@@ -13,6 +14,7 @@ import {
   withTx,
 } from '@aegis/db';
 import {
+  INSTRUMENT_DECLINED_AUDIT,
   authorizeHold,
   capture,
   getAuthorization,
@@ -51,7 +53,7 @@ const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 /** Codes where running the same job again cannot help: the order is in the wrong place, or the input is wrong. */
 const PERMANENT = new Set([
   'NOT_FOUND', 'BAD_STATE', 'VALIDATION', 'PROOF_GATE_FAILED', 'SLA_PASSED', 'AMOUNT_MISMATCH', 'ALREADY_CAPTURED',
-  'CARRIER_UNKNOWN', 'ORDER_NOT_APPROVED',
+  'CARRIER_UNKNOWN', 'ORDER_NOT_APPROVED', 'INSTRUMENT_DECLINED',
 ]);
 
 /**
@@ -243,6 +245,9 @@ export async function runPollOpen(d: WorkerDeps): Promise<PollResult> {
 
   for (const o of await listOrdersInStates(ctx.db, ['AWAITING_APPROVAL'])) {
     if (!o.paypalOrderId || d.clock.now().getTime() - o.updatedAt.getTime() < APPROVAL_GRACE_MS) continue;
+    // After a decline PayPal may still call the order APPROVED. Authorizing again from here would retry the declined
+    // instrument on every tick, so a declined order waits for the buyer's next approval in the app instead.
+    if ((await countAuditOfType(ctx.db, o.id, INSTRUMENT_DECLINED_AUDIT)) > 0) continue;
     out.checked++;
     try {
       const remote = await getPayPalOrder(ctx, o.id, o.paypalOrderId);
@@ -250,7 +255,8 @@ export async function runPollOpen(d: WorkerDeps): Promise<PollResult> {
       await authorizeHold(ctx, o.id, o.paypalOrderId);
       out.applied.push(o.id);
     } catch (err) {
-      if (err instanceof DomainError && (err.code === 'ORDER_NOT_APPROVED' || err.code === 'BAD_STATE')) continue;
+      // INSTRUMENT_DECLINED waits for the buyer to choose another funding source in PayPal; polling again cannot fix it.
+      if (err instanceof DomainError && (err.code === 'ORDER_NOT_APPROVED' || err.code === 'INSTRUMENT_DECLINED' || err.code === 'BAD_STATE')) continue;
       fail(o.id, err);
     }
   }

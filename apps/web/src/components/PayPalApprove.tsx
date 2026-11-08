@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, errorMessage } from '../api.ts';
+import { ApiError, api, errorMessage } from '../api.ts';
 import { formatDay, money } from '../format.ts';
 import { useStore } from '../store.ts';
 import type { OrderRow } from '../types.ts';
@@ -8,6 +8,9 @@ import { Modal } from './Modal.tsx';
 
 type Phase = 'loading' | 'ready' | 'unavailable' | 'authorizing';
 type OneTimeSession = { start: (o?: { presentationMode: 'auto' }, p?: Promise<{ orderId: string }>) => Promise<unknown> };
+
+/** Where a buyer approves an order outside the SDK, per PayPal environment (the server only ever reports `sandbox`). */
+const CHECKOUT_HOST = { sandbox: 'https://www.sandbox.paypal.com' } as const;
 
 /**
  * The buyer approves the PayPal order, then the server authorizes it (a hold; nothing is captured). The PayPal JS SDK v6
@@ -20,6 +23,7 @@ export function PayPalApproveDialog({ order, onClose }: { order: OrderRow; onClo
   const toast = useStore((s) => s.toast);
   const [phase, setPhase] = useState<Phase>('loading');
   const [note, setNote] = useState('');
+  const [declined, setDeclined] = useState(false);
   const sdkSession = useRef<OneTimeSession | null>(null);
   const paypalOrderId = order.paypalOrderId;
 
@@ -31,8 +35,12 @@ export function PayPalApproveDialog({ order, onClose }: { order: OrderRow; onClo
       await loadAll();
       onClose();
     } catch (e) {
-      setNote(errorMessage(e));
-      setPhase('ready');
+      // 422 INSTRUMENT_DECLINED: PayPal refused the funding source the buyer picked. Trying it again cannot work, so the
+      // buyer goes back into PayPal (same order) to choose another way to pay. A popup needs a click, so we ask for one.
+      const wasDeclined = e instanceof ApiError && e.code === 'INSTRUMENT_DECLINED';
+      setDeclined(wasDeclined);
+      setNote(wasDeclined ? 'PayPal declined that payment method. Choose another way to pay; nothing has been held.' : errorMessage(e));
+      setPhase(sdkSession.current ? 'ready' : 'unavailable');
     }
   };
   const authorizeRef = useRef(authorize);
@@ -44,9 +52,12 @@ export function PayPalApproveDialog({ order, onClose }: { order: OrderRow; onClo
     (async () => {
       try {
         const { loadCoreSdkScript } = await import('@paypal/paypal-js/sdk-v6');
-        const ns = await loadCoreSdkScript({ environment: 'sandbox' });
+        const ns = await loadCoreSdkScript({ environment: session.paypalEnv });
         if (!ns) throw new Error('PayPal SDK did not load');
         const sdk = await ns.createInstance({ clientId: session.paypalClientId, components: ['paypal-payments'], pageType: 'checkout' });
+        // Ask PayPal which methods this buyer can use for this currency before offering the button.
+        const methods = await sdk.findEligibleMethods({ currencyCode: order.currency });
+        if (!methods.isEligible('paypal')) throw new Error('PayPal is not offered for this currency here');
         sdkSession.current = sdk.createPayPalOneTimePaymentSession({
           onApprove: async () => authorizeRef.current(),
           onCancel: () => setNote('Approval cancelled: the hold has not been placed.'),
@@ -61,11 +72,13 @@ export function PayPalApproveDialog({ order, onClose }: { order: OrderRow; onClo
       }
     })();
     return () => { cancelled = true; };
-  }, [session, paypalOrderId]);
+  }, [session, paypalOrderId, order.currency]);
 
   const start = async () => {
     if (!sdkSession.current || !paypalOrderId) return;
+    setDeclined(false);
     try {
+      // The order already exists on the server, so the promise passed to start() resolves to it ({ orderId }, v6 shape).
       await sdkSession.current.start({ presentationMode: 'auto' }, Promise.resolve({ orderId: paypalOrderId }));
     } catch (e) {
       setNote(errorMessage(e));
@@ -86,7 +99,7 @@ export function PayPalApproveDialog({ order, onClose }: { order: OrderRow; onClo
     );
   }
 
-  const link = `https://www.sandbox.paypal.com/checkoutnow?token=${encodeURIComponent(paypalOrderId)}`;
+  const link = `${CHECKOUT_HOST[session?.paypalEnv ?? 'sandbox']}/checkoutnow?token=${encodeURIComponent(paypalOrderId)}`;
   return (
     <Modal title="Approve this hold" onClose={onClose}>
       <p>
@@ -96,7 +109,7 @@ export function PayPalApproveDialog({ order, onClose }: { order: OrderRow; onClo
       </p>
       <div className="actions stack">
         <button className="paypal" disabled={phase !== 'ready'} onClick={start} data-testid="paypal-button">
-          {phase === 'loading' ? 'Loading PayPal…' : phase === 'authorizing' ? 'Placing the hold…' : 'Approve with PayPal'}
+          {phase === 'loading' ? 'Loading PayPal…' : phase === 'authorizing' ? 'Placing the hold…' : declined ? 'Choose another way to pay' : 'Approve with PayPal'}
         </button>
         <a href={link} target="_blank" rel="noreferrer" data-testid="paypal-link">Open the sandbox checkout in a new tab</a>
         <button onClick={authorize} disabled={phase === 'authorizing'} data-testid="paypal-authorize">I approved it: place the hold</button>

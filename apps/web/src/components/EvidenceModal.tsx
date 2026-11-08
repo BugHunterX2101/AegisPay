@@ -10,6 +10,7 @@ interface BundleView {
   id: string;
   sha256: string;
   notes: string | null;
+  target: 'provide-evidence' | 'provide-supporting-info' | null;
   files: Array<{ name: string; mime: string; sha256: string; bytes: number }>;
   reviewedBy: string | null;
   submittedAt: string | null;
@@ -85,6 +86,13 @@ export function EvidenceModal({ disputeId, onClose }: { disputeId: string; onClo
       {b && (
         <div data-testid="bundle">
           <h3>Evidence bundle <code title={b.sha256}>{b.sha256.slice(0, 12)}…</code></h3>
+          {b.target && (
+            <p className="muted" data-testid="bundle-target">
+              {b.target === 'provide-supporting-info'
+                ? 'PayPal is reviewing this chargeback, so this goes to PayPal as supporting information.'
+                : 'PayPal has asked for evidence, so this goes to PayPal as evidence.'}
+            </p>
+          )}
           {b.notes && <blockquote>{b.notes}</blockquote>}
           <ul>
             {b.files.map((f) => (

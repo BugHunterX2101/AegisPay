@@ -10,6 +10,7 @@ export type ErrorCode =
   | 'SLA_PASSED'
   | 'ALREADY_CAPTURED'
   | 'ORDER_NOT_APPROVED'
+  | 'INSTRUMENT_DECLINED'
   | 'CARRIER_UNKNOWN'
   | 'PROOF_GATE_FAILED'
   | 'EVIDENCE_BLOCKED'
@@ -33,6 +34,8 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   SLA_PASSED: 409,
   ALREADY_CAPTURED: 409,
   ORDER_NOT_APPROVED: 409,
+  // PayPal declined the buyer's funding source. The buyer must choose another one; retrying the same one is pointless.
+  INSTRUMENT_DECLINED: 422,
   CARRIER_UNKNOWN: 400,
   PROOF_GATE_FAILED: 409,
   EVIDENCE_BLOCKED: 409,

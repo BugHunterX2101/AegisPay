@@ -45,6 +45,7 @@ async function main(): Promise<void> {
     webRoot: fileURLToPath(new URL('../public', import.meta.url)), // the built web app; API-only if `pnpm build` has not run
     judgeMode: process.env.JUDGE_MODE !== 'false',
     paypalClientId: config.clientId, // public by design: the browser loads the PayPal SDK with it. Never the secret.
+    paypalEnv: config.environment,
     logger: true,
   });
 

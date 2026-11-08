@@ -13,7 +13,7 @@ import {
   listRefunds,
 } from '@aegis/db';
 import type { EvidenceBundleRow } from '@aegis/db';
-import { buildEvidenceBundle, reviewEvidenceBundle, submitEvidence, syncDispute } from '@aegis/payments';
+import { buildEvidenceBundle, bundleTarget, reviewEvidenceBundle, submitEvidence, syncDispute } from '@aegis/payments';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { ApiDeps } from '../deps.ts';
@@ -23,12 +23,15 @@ const FileParams = z.object({ bundleId: z.string().uuid(), name: z.string().rege
 
 /** What a person needs to review a bundle: the notes, the hashes and the file list. The bytes are fetched one file at a time. */
 function bundleView(b: EvidenceBundleRow) {
-  const evidences = (b.inputJson as { evidences?: Array<{ notes?: string }> } | null)?.evidences;
+  const input = b.inputJson as { evidences?: Array<{ notes?: string }>; notes?: string } | null;
   return {
     id: b.id,
     disputeId: b.disputeId,
     sha256: b.sha256,
-    notes: evidences?.[0]?.notes ?? null,
+    // Both bodies carry the seller's notes, and the reviewer must see exactly what will be sent.
+    notes: input?.evidences?.[0]?.notes ?? input?.notes ?? null,
+    /** Which PayPal action this bundle is for: provide-evidence or provide-supporting-info. */
+    target: bundleTarget(b.inputJson),
     plan: b.plan,
     files: b.files.map((f) => ({ name: f.name, mime: f.mime, sha256: f.sha256, bytes: Buffer.byteLength(f.bytes_base64, 'base64') })),
     reviewedBy: b.reviewedBy,

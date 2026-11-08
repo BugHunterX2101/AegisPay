@@ -148,6 +148,7 @@ async function onApproval(ctx: PayPalContext, ev: WebhookEventRow, refs: { paypa
   } catch (err) {
     // authorizeHold asks PayPal; PayPal saying "not approved" overrules the event.
     if (err instanceof DomainError && err.code === 'ORDER_NOT_APPROVED') return result('NOOP', 'PayPal reports the order is not approved', orderId);
+    if (err instanceof DomainError && err.code === 'INSTRUMENT_DECLINED') return result('NOOP', 'PayPal declined the funding source; the buyer must choose another', orderId);
     if (err instanceof DomainError && err.code === 'BAD_STATE') return result('NOOP', err.message, orderId);
     throw err;
   }

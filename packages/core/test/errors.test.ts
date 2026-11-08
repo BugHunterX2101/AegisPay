@@ -5,7 +5,7 @@ import type { ErrorCode } from '../src/index.ts';
 describe('HTTP_STATUS', () => {
   it('maps every error code to a 4xx/5xx status', () => {
     const entries = Object.entries(HTTP_STATUS);
-    expect(entries).toHaveLength(21);
+    expect(entries).toHaveLength(22);
     for (const [, status] of entries) {
       expect(Number.isInteger(status)).toBe(true);
       expect(status).toBeGreaterThanOrEqual(400);
