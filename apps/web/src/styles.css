@@ -409,6 +409,13 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
 }
 :root[data-theme='dark'] .amb-b { --amb-b: var(--sc-teal); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .amb-b { --amb-b: var(--sc-teal); } }
+
+/* The lower light carries the live ledger (Ambient.tsx sets data-tone and --amb-load). Registered so the colour eases between tones. */
+@property --amb-b { syntax: '<color>'; inherits: true; initial-value: transparent; }
+.amb-b { opacity: calc(0.6 + 0.4 * var(--amb-load, 0)); transition: --amb-b 1.4s var(--ease-out), opacity 1.4s var(--ease-out); }
+.ambient[data-tone='hold'] .amb-b { --amb-b: var(--sc-brass); }
+.ambient[data-tone='captured'] .amb-b { --amb-b: var(--sc-green); }
+.ambient[data-tone='dispute'] .amb-b { --amb-b: var(--sc-garnet); }
 @media (forced-colors: active) { .ambient, .hero-plate { display: none; } }
 
 /* ---------- footer ---------- */

@@ -103,7 +103,7 @@ export function App() {
       {voidFor && <VoidDialog order={voidFor} onClose={close} />}
       {cancelFor && <CancelDialog order={cancelFor} onClose={close} />}
       {approve && <PayPalApproveDialog order={approve} onClose={() => setApprove(null)} />}
-      {evidenceFor && <EvidenceModal disputeId={evidenceFor} onClose={() => openEvidence(null)} />}
+      {session && evidenceFor && <EvidenceModal disputeId={evidenceFor} onClose={() => openEvidence(null)} />}
       <Toasts />
     </>
   );

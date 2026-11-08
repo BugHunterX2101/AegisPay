@@ -33,6 +33,17 @@ interface AppState {
 
 const FEED_MAX = 200;
 const DRAWER_HASH = '#activity';
+const DISPUTE_HASH = '#dispute/';
+
+function disputeFromHash(): string | null {
+  const h = window.location.hash;
+  if (!h.startsWith(DISPUTE_HASH)) return null;
+  try {
+    return decodeURIComponent(h.slice(DISPUTE_HASH.length)) || null;
+  } catch {
+    return null; // a malformed escape in a pasted link: ignore it rather than throw during module load
+  }
+}
 let toastSeq = 0;
 
 export const useStore = create<AppState>((set) => ({
@@ -44,7 +55,7 @@ export const useStore = create<AppState>((set) => ({
   stream: 'connecting',
   offsetDays: 0,
   drawerOpen: window.location.hash === DRAWER_HASH,
-  evidenceFor: null,
+  evidenceFor: disputeFromHash(),
   toasts: [],
   setSession: (session) => set({ session }),
   setOrders: (rows) => set({ orders: Object.fromEntries(rows.map((r) => [r.id, r])) }),
@@ -68,7 +79,21 @@ export const useStore = create<AppState>((set) => ({
     else if (!drawerOpen && h === DRAWER_HASH) window.history.replaceState(null, '', window.location.pathname + window.location.search);
     set({ drawerOpen });
   },
-  openEvidence: (evidenceFor) => set({ evidenceFor }),
+  openEvidence: (evidenceFor) => {
+    // A dispute's evidence is a resource with an id, so it gets a link: #dispute/<paypal id>. Order dialogs act on money and stay unlinked.
+    const h = window.location.hash;
+    if (evidenceFor) window.history.replaceState(null, '', `${DISPUTE_HASH}${encodeURIComponent(evidenceFor)}`);
+    else if (h.startsWith(DISPUTE_HASH)) window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    set({ evidenceFor });
+  },
   toast: (kind, text) => set((s) => ({ toasts: [...s.toasts, { id: ++toastSeq, kind, text }].slice(-4) })),
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }));
+
+// A pasted link or the back button can change the hash after load. It only ever opens a panel: the section anchors (#console) leave open panels alone.
+window.addEventListener('hashchange', () => {
+  const st = useStore.getState();
+  if (window.location.hash === DRAWER_HASH && !st.drawerOpen) useStore.setState({ drawerOpen: true });
+  const id = disputeFromHash();
+  if (id && id !== st.evidenceFor) useStore.setState({ evidenceFor: id });
+});

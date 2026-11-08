@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/App.tsx": {
-    "mtime": 1794117688.4198165,
-    "seen": 1794118283.2354987,
-    "ast_hash": "bdb3ea4d31167deba144c98106bee99c",
+    "mtime": 1794119402.2795188,
+    "seen": 1794119729.8431382,
+    "ast_hash": "93b3a566ab6cad1e244df47e542fdf40",
     "semantic_hash": ""
   },
   "apps/web/src/api.ts": {
@@ -1044,9 +1044,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/store.ts": {
-    "mtime": 1794119158.7808094,
-    "seen": 1794119312.5173836,
-    "ast_hash": "0f9f4a0bb8431297fa1984d706e2d1b1",
+    "mtime": 1794119399.892638,
+    "seen": 1794119729.8431733,
+    "ast_hash": "834f00e90e4648005ed7969b7c3fc402",
     "semantic_hash": ""
   },
   "apps/web/src/types.ts": {
@@ -1146,9 +1146,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/Ambient.tsx": {
-    "mtime": 1794111192.0934844,
-    "seen": 1794111953.3153267,
-    "ast_hash": "8a6b9cbea358c81e09b0972ee0bd888f",
+    "mtime": 1794119410.4903767,
+    "seen": 1794119729.843144,
+    "ast_hash": "133a99f0ec93ecdf1d2eac96ca0210f6",
     "semantic_hash": ""
   },
   "apps/web/src/components/Footer.tsx": {
