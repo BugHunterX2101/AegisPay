@@ -72,7 +72,21 @@ export function PayPalApproveDialog({ order, onClose }: { order: OrderRow; onClo
     }
   };
 
-  const link = `https://www.sandbox.paypal.com/checkoutnow?token=${encodeURIComponent(paypalOrderId ?? '')}`;
+  // Without a PayPal order there is nothing to approve and the SDK never starts, so say so instead of "Loading…" forever.
+  if (!paypalOrderId) {
+    return (
+      <Modal title="Approve this hold" onClose={onClose}>
+        <p className="note" role="status">
+          This order has no PayPal order yet, so it can't be approved. Cancel it and draft the purchase again.
+        </p>
+        <div className="actions">
+          <button onClick={onClose}>OK</button>
+        </div>
+      </Modal>
+    );
+  }
+
+  const link = `https://www.sandbox.paypal.com/checkoutnow?token=${encodeURIComponent(paypalOrderId)}`;
   return (
     <Modal title="Approve this hold" onClose={onClose}>
       <p>

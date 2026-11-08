@@ -5,8 +5,21 @@ import { CAPTURED_STATES, HELD_STATES, VOIDED_STATES, sumMinor } from '../format
 import { dur, ease, useReducedMotion } from '../motion.ts';
 import { LANES, LANE_LABEL, laneCounts, sceneOrders } from '../scene/lanes.ts';
 import type { HoldScene } from '../scene/lanes.ts';
+import { createPlate } from '../scene/plate.ts';
+import type { Plate, PlatePulse } from '../scene/plate.ts';
 import { useStore } from '../store.ts';
 import { onThemeChange } from '../theme.ts';
+
+type StoreState = ReturnType<typeof useStore.getState>;
+
+/** The newest feed item as a pulse. Only the newest: a replay after reconnect must not flash the whole history. */
+function feedPulse(st: StoreState, prev: StoreState): PlatePulse | null {
+  const f = st.feed[0];
+  if (st.feed === prev.feed || !f || f.key === prev.feed[0]?.key) return null;
+  if (f.kind === 'webhook.verified') return 'webhook';
+  if (f.kind === 'gate.decision') return f.data.pass === true || f.data.gatePass === true ? 'pass' : 'block';
+  return null;
+}
 
 gsap.registerPlugin(useGSAP);
 
@@ -36,7 +49,7 @@ function useHoldScene(canvas: React.RefObject<HTMLCanvasElement | null>, paused:
     let cancelled = false;
     let unsub: Array<() => void> = [];
 
-    const io = new IntersectionObserver(([entry]) => scene.current?.setVisible(!!entry?.isIntersecting), { rootMargin: '120px' });
+    const io = new IntersectionObserver((entries) => scene.current?.setVisible(!!entries[entries.length - 1]?.isIntersecting), { rootMargin: '120px' });
     io.observe(el);
 
     import('../scene/holdScene.ts')
@@ -50,12 +63,8 @@ function useHoldScene(canvas: React.RefObject<HTMLCanvasElement | null>, paused:
           onThemeChange(() => s.refreshTheme()),
           useStore.subscribe((st, prev) => {
             if (st.orders !== prev.orders) s.setOrders(sceneOrders(st.orders));
-            // Only the newest feed item pulses: a replay after reconnect must not flash the whole history.
-            if (st.feed !== prev.feed && st.feed[0] && st.feed[0].key !== prev.feed[0]?.key) {
-              const f = st.feed[0];
-              if (f.kind === 'webhook.verified') s.pulse('webhook');
-              else if (f.kind === 'gate.decision') s.pulse(f.data.pass === true || f.data.gatePass === true ? 'pass' : 'block');
-            }
+            const kind = feedPulse(st, prev);
+            if (kind) s.pulse(kind);
           }),
         ];
       })
@@ -76,12 +85,52 @@ function useHoldScene(canvas: React.RefObject<HTMLCanvasElement | null>, paused:
   return failed;
 }
 
+/** The ledger relief at the foot of the hero (scene/plate.ts): one ridge per lane, risen with the live order counts. It has its own band of clean ground, so it needs nothing else to lay out. */
+function usePlate(
+  canvas: React.RefObject<HTMLCanvasElement | null>,
+  host: React.RefObject<HTMLElement | null>,
+  paused: boolean,
+  reduced: boolean,
+) {
+  const plate = useRef<Plate | null>(null);
+  useEffect(() => {
+    const c = canvas.current, h = host.current;
+    if (!c || !h) return;
+    const p = createPlate(c, { host: h, reduced });
+    if (!p) return; // no WebGL: the page ground carries on alone
+    plate.current = p;
+    const lanesOf = (orders: StoreState['orders']) => {
+      const c = laneCounts(orders);
+      return LANES.map((l) => c[l]);
+    };
+    p.setLanes(lanesOf(useStore.getState().orders));
+    const unsub = [
+      onThemeChange(() => p.refreshTheme()),
+      useStore.subscribe((st, prev) => {
+        if (st.orders !== prev.orders) p.setLanes(lanesOf(st.orders));
+        const kind = feedPulse(st, prev);
+        if (kind) p.pulse(kind);
+      }),
+    ];
+    return () => {
+      unsub.forEach((u) => u());
+      p.dispose();
+      plate.current = null;
+    };
+    // Built once, like the scene; paused and reduced are pushed in below.
+  }, [canvas, host]);
+  useEffect(() => plate.current?.setPaused(paused), [paused]);
+  useEffect(() => plate.current?.setReduced(reduced), [reduced]);
+}
+
 export function Hero() {
   const root = useRef<HTMLElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
+  const plateCanvas = useRef<HTMLCanvasElement>(null);
   const reduced = useReducedMotion();
   const [paused, setPaused] = useState(false);
   const failed = useHoldScene(canvas, paused || reduced, reduced);
+  usePlate(plateCanvas, root, paused, reduced);
 
   const orders = useStore((s) => s.orders);
   const rows = useMemo(() => Object.values(orders), [orders]);
@@ -110,6 +159,7 @@ export function Hero() {
 
   return (
     <section className="hero" ref={root} aria-labelledby="hero-title">
+      <canvas ref={plateCanvas} className="hero-plate" aria-hidden="true" />
       <div className="hero-copy">
         <p className="eyebrow" data-enter="fade">Spend control for AI purchasing agents <span aria-hidden="true">·</span> PayPal sandbox</p>
         <h1 id="hero-title" className="hero-title">
@@ -134,7 +184,8 @@ export function Hero() {
       <figure className="hero-stage" aria-label="Live view of every order in this demo, grouped by where its money is">
         <div className="stage-frame">
           {failed ? <RingsFallback /> : <canvas ref={canvas} className="hero-canvas" aria-hidden="true" />}
-          {!failed && !reduced && (
+          {/* One control for everything that moves on its own in the hero: the scene and the plate. */}
+          {!reduced && (
             <button className="stage-pause sm" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
               {paused ? 'Play motion' : 'Pause motion'}
             </button>

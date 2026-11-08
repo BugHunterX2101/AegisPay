@@ -1014,9 +1014,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/PayPalApprove.tsx": {
-    "mtime": 1794058758.9448128,
-    "seen": 1794059494.1549437,
-    "ast_hash": "4de2b4ee51172248a4262e8ba349737a",
+    "mtime": 1794110814.0859442,
+    "seen": 1794111953.3153565,
+    "ast_hash": "7e2a9138e3374785f74a86fa75be33ec",
     "semantic_hash": ""
   },
   "apps/web/src/components/StateChip.tsx": {
@@ -1146,9 +1146,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/Ambient.tsx": {
-    "mtime": 1794078619.9564202,
-    "seen": 1794079248.821388,
-    "ast_hash": "6dd221af5167a96c574786ac176cac6c",
+    "mtime": 1794111192.0934844,
+    "seen": 1794111953.3153267,
+    "ast_hash": "8a6b9cbea358c81e09b0972ee0bd888f",
     "semantic_hash": ""
   },
   "apps/web/src/components/Footer.tsx": {
@@ -1158,9 +1158,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/Hero.tsx": {
-    "mtime": 1794074975.3540635,
-    "seen": 1794079248.8214064,
-    "ast_hash": "6d8bf171ac42390de8a13033e529d940",
+    "mtime": 1794114713.7530901,
+    "seen": 1794114982.825726,
+    "ast_hash": "0de8c9da6e3adaf1f7e24a3f8c976b19",
     "semantic_hash": ""
   },
   "apps/web/src/components/Lifecycle.tsx": {
@@ -1197,6 +1197,12 @@
     "mtime": 1794070548.8044004,
     "seen": 1794079248.8214586,
     "ast_hash": "6d856a71f3e981f8db84cbbba93aaab2",
+    "semantic_hash": ""
+  },
+  "apps/web/src/scene/plate.ts": {
+    "mtime": 1794114704.6031575,
+    "seen": 1794114982.8257673,
+    "ast_hash": "26238a4df88b63725977687de225b361",
     "semantic_hash": ""
   },
   "pnpm-lock.yaml": {

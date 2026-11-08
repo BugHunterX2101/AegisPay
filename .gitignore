@@ -22,3 +22,6 @@ PayPal AI Hackathon Strategy Report.docx
 # local agent skills (installed by npx skills)
 .agents/
 skills-lock.json
+
+# design-skill scratch (history, chrome profiles)
+.taste-skill/

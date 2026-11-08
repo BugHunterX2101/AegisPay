@@ -192,8 +192,18 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
 
 /* ---------- hero ---------- */
 .hero {
+  --relief-h: clamp(180px, 27vw, 380px);
+  position: relative; isolation: isolate;
   display: grid; gap: var(--s-7); align-items: center;
-  padding-block: var(--s-8) var(--s-9);
+  padding-block: var(--s-8) var(--relief-h);
+}
+/* The ledger relief (scene/plate.ts) has its own band: the clean ground at the foot of the hero, full bleed, below
+   the copy and the figure. Its far edge thins into the paper, so there is no seam above it. */
+.hero-plate {
+  position: absolute; z-index: -1; bottom: 0; left: 50%; translate: -50% 0;
+  width: 100vw; height: var(--relief-h); display: block; pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 38%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 38%);
 }
 .hero-copy { display: grid; gap: var(--s-5); justify-items: start; }
 .hero-title {
@@ -346,42 +356,46 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
 .lifecycle[data-mode='pinned'] .chapter p:not(.chapter-n) { font-size: 17px; }
 
 /* ---------- ambient room ---------- */
-/* Fixed behind everything. Only transform and opacity ever change; the layers are not interactive. */
+/*
+ * A still ground behind everything: the ledger ruling on the page's edges (clear behind the content) and two corner
+ * lights. It never moves; the hero's engraved plate (.hero-plate) is the page's one effect.
+ */
 #main, .site-footer { position: relative; z-index: 1; }
 .ambient { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; contain: strict; }
 .amb-grid {
-  position: absolute; inset: -8% 0 -20%;
+  position: absolute; inset: 0;
   background-image:
-    linear-gradient(to right, color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--foreground) 7%, transparent) 1px, transparent 1px);
+    linear-gradient(to right, color-mix(in srgb, var(--foreground) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--foreground) 6%, transparent) 1px, transparent 1px);
   background-size: 64px 64px;
-  -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 38%, #000 0%, transparent 78%);
-  mask-image: radial-gradient(ellipse 75% 65% at 50% 38%, #000 0%, transparent 78%);
-  will-change: transform;
+  background-position: center top;
+  -webkit-mask-image: radial-gradient(ellipse 62% 78% at 50% 46%, transparent 42%, #000 100%);
+  mask-image: radial-gradient(ellipse 62% 78% at 50% 46%, transparent 42%, #000 100%);
 }
-.amb-glow, .amb-spot { position: absolute; left: 0; top: 0; border-radius: 50%; will-change: transform; }
-.amb-glow { width: min(62vw, 880px); aspect-ratio: 1; }
-.amb-a { background: radial-gradient(closest-side, color-mix(in srgb, var(--sc-accent) 24%, transparent), transparent); }
-.amb-b { background: radial-gradient(closest-side, color-mix(in srgb, var(--sc-brass) 26%, transparent), transparent); }
-:root[data-theme='dark'] .amb-b { background: radial-gradient(closest-side, color-mix(in srgb, var(--sc-teal) 18%, transparent), transparent); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .amb-b { background: radial-gradient(closest-side, color-mix(in srgb, var(--sc-teal) 18%, transparent), transparent); }
+.amb-glow { position: absolute; width: max(70vw, 720px); aspect-ratio: 1; border-radius: 50%; }
+/* corner lights: five eased stops so no ring shows */
+.amb-a {
+  left: 0; top: 0; translate: -38% -46%;
+  background: radial-gradient(closest-side,
+    color-mix(in srgb, var(--sc-accent) 20%, transparent) 0%,
+    color-mix(in srgb, var(--sc-accent) 13%, transparent) 30%,
+    color-mix(in srgb, var(--sc-accent) 6%, transparent) 58%,
+    color-mix(in srgb, var(--sc-accent) 2%, transparent) 80%,
+    transparent 100%);
 }
-.amb-spot { width: 360px; aspect-ratio: 1; background: radial-gradient(closest-side, color-mix(in srgb, var(--sc-brass) 16%, transparent), transparent); }
-@media (pointer: coarse) { .amb-spot { display: none; } }
-.amb-grain {
-  position: absolute; inset: 0; opacity: 0.5; mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+.amb-b {
+  right: 0; bottom: 0; translate: 40% 44%;
+  --amb-b: var(--sc-brass);
+  background: radial-gradient(closest-side,
+    color-mix(in srgb, var(--amb-b) 24%, transparent) 0%,
+    color-mix(in srgb, var(--amb-b) 15%, transparent) 30%,
+    color-mix(in srgb, var(--amb-b) 7%, transparent) 58%,
+    color-mix(in srgb, var(--amb-b) 2%, transparent) 80%,
+    transparent 100%);
 }
-:root[data-theme='dark'] .amb-grain { mix-blend-mode: screen; opacity: 0.35; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .amb-grain { mix-blend-mode: screen; opacity: 0.35; } }
-/* Still version: reduced motion keeps the room, minus the travelling lights. */
-@media (prefers-reduced-motion: reduce) {
-  .amb-a { transform: translate(8vw, 10vh); }
-  .amb-b { transform: translate(58vw, 40vh); }
-  .amb-spot { display: none; }
-}
-@media (forced-colors: active) { .ambient { display: none; } }
+:root[data-theme='dark'] .amb-b { --amb-b: var(--sc-teal); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .amb-b { --amb-b: var(--sc-teal); } }
+@media (forced-colors: active) { .ambient, .hero-plate { display: none; } }
 
 /* ---------- footer ---------- */
 .site-footer { border-top: 1px solid var(--border); padding-block: var(--s-7); }
@@ -453,7 +467,8 @@ button.toast-error { border-left-color: var(--tone-garnet); color: var(--tone-ga
 
 /* ---------- breakpoints ---------- */
 @media (min-width: 1024px) {
-  .hero { grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr); gap: var(--s-8); padding-block: var(--s-9) var(--s-10); }
+  /* the foot of the hero is the stage of the ledger relief: its ridges stand there, below the copy and the figure */
+  .hero { grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr); gap: var(--s-8); padding-block: var(--s-9) var(--relief-h); }
   .hero-stage { justify-self: end; }
 }
 @media (max-width: 900px) {
@@ -464,13 +479,19 @@ button.toast-error { border-left-color: var(--tone-garnet); color: var(--tone-ga
   :root { --topbar-h: 104px; }
   .topbar-right .tag { display: none; }
   .topbar-right { width: 100%; }
-  .hero { padding-block: var(--s-6) var(--s-8); gap: var(--s-6); }
+  .hero { padding-block: var(--s-6) var(--relief-h); gap: var(--s-6); }
   .figures { gap: var(--s-3); }
   .console { padding-block: var(--s-7) var(--s-8); }
   .strip, .banner { padding: var(--s-4); }
   .grid-wrap { height: 460px; }
   .lifecycle { padding-block: var(--s-8); }
   .modal-body { padding: var(--s-4); }
+}
+/* Touch screens: 44px targets in dialogs and the drawer, and 16px fields so iOS Safari does not zoom on focus. */
+@media (pointer: coarse) {
+  .modal button, .drawer button { min-height: 44px; }
+  .modal button.icon, .drawer button.icon { min-width: 44px; }
+  input, select, textarea, label > input, label > select, label > textarea { min-height: 44px; font-size: 16px; }
 }
 
 /* ---------- reduced motion: no transforms, no travel ---------- */

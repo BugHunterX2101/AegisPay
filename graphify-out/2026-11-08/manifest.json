@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/App.tsx": {
-    "mtime": 1794078049.1519957,
-    "seen": 1794079248.8213747,
-    "ast_hash": "fcbaaf367cc026f15aa9e24517b0b21f",
+    "mtime": 1794109869.193968,
+    "seen": 1794110273.5594995,
+    "ast_hash": "b81ac6d1dd6f0c05c1646f12356105cf",
     "semantic_hash": ""
   },
   "apps/web/src/api.ts": {
@@ -984,9 +984,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/CommandGrid.tsx": {
-    "mtime": 1794080467.8736432,
-    "seen": 1794080616.691499,
-    "ast_hash": "f7f5bce9530ae098f6645466c449c0c5",
+    "mtime": 1794109882.7782235,
+    "seen": 1794110273.5595074,
+    "ast_hash": "21b8969566ad82d7355b1846aef80a9e",
     "semantic_hash": ""
   },
   "apps/web/src/components/Dialogs.tsx": {
@@ -1014,9 +1014,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/PayPalApprove.tsx": {
-    "mtime": 1794058758.9448128,
-    "seen": 1794059494.1549437,
-    "ast_hash": "4de2b4ee51172248a4262e8ba349737a",
+    "mtime": 1794110814.0859442,
+    "seen": 1794111953.3153565,
+    "ast_hash": "7e2a9138e3374785f74a86fa75be33ec",
     "semantic_hash": ""
   },
   "apps/web/src/components/StateChip.tsx": {
@@ -1146,9 +1146,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/Ambient.tsx": {
-    "mtime": 1794078619.9564202,
-    "seen": 1794079248.821388,
-    "ast_hash": "6dd221af5167a96c574786ac176cac6c",
+    "mtime": 1794111192.0934844,
+    "seen": 1794111953.3153267,
+    "ast_hash": "8a6b9cbea358c81e09b0972ee0bd888f",
     "semantic_hash": ""
   },
   "apps/web/src/components/Footer.tsx": {
@@ -1158,9 +1158,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/Hero.tsx": {
-    "mtime": 1794074975.3540635,
-    "seen": 1794079248.8214064,
-    "ast_hash": "6d8bf171ac42390de8a13033e529d940",
+    "mtime": 1794111130.3907003,
+    "seen": 1794111953.3153436,
+    "ast_hash": "48d2a79788444054f513afe018bb3bf7",
     "semantic_hash": ""
   },
   "apps/web/src/components/Lifecycle.tsx": {
@@ -1197,6 +1197,18 @@
     "mtime": 1794070548.8044004,
     "seen": 1794079248.8214586,
     "ast_hash": "6d856a71f3e981f8db84cbbba93aaab2",
+    "semantic_hash": ""
+  },
+  ".taste-skill/effects-history.json": {
+    "mtime": 1794110652.4674313,
+    "seen": 1794111953.3150716,
+    "ast_hash": "4b3dd75f6272c3e14d2659a84989805f",
+    "semantic_hash": ""
+  },
+  "apps/web/src/scene/plate.ts": {
+    "mtime": 1794111675.0743666,
+    "seen": 1794111953.315385,
+    "ast_hash": "6fa70101418a4fd194b13115813e0564",
     "semantic_hash": ""
   },
   "pnpm-lock.yaml": {
