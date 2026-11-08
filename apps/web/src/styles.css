@@ -47,8 +47,6 @@ code, pre, kbd, samp { font-family: var(--font-mono); font-size: 12px; }
 small { font-size: 12px; }
 strong { font-weight: 600; }
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-/* Script-focused containers lose the ring only for pointer focus; keyboard focus keeps :focus-visible above. */
-[tabindex='-1']:focus:not(:focus-visible) { outline: none; }
 
 main.center { display: grid; place-items: center; min-height: 60vh; padding: var(--gutter); }
 .wrap { width: 100%; max-width: var(--wrap); margin-inline: auto; padding-inline: var(--gutter); }
@@ -127,10 +125,10 @@ label.check { display: flex; align-items: flex-start; gap: var(--s-3); margin: v
 .pill {
   display: inline-flex; align-items: center; gap: 6px;
   min-height: 34px; padding: 0 var(--s-3);
-  border: 1px solid var(--border); border-radius: 999px;
+  border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--card); color: var(--foreground); font-size: 13px; font-weight: 500; white-space: nowrap;
 }
-button.pill { min-height: 34px; padding: 0 var(--s-3); border-color: var(--border); border-radius: 999px; }
+button.pill { min-height: 34px; padding: 0 var(--s-3); border-color: var(--border); }
 button.pill-icon { min-width: 34px; padding: 0; }
 .count {
   display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px;
@@ -265,7 +263,6 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
   border-block: 1px solid var(--border);
   padding-block: var(--s-8) var(--s-9);
 }
-.console:focus:not(:focus-visible) { outline: none; }
 .console-inner { display: grid; gap: var(--s-5); }
 
 .banner {
@@ -313,6 +310,10 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
 .grid-wrap { height: 560px; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-1); }
 .grid-loading { display: grid; place-items: center; background: var(--card); color: var(--muted-foreground); font-size: 13px; }
 .row-actions { display: flex; align-items: center; gap: 6px; height: 100%; }
+/* Titles wrap (the Order column is autoHeight); every other cell centres on the taller row. */
+.grid-wrap .ag-cell { display: flex; align-items: center; }
+.grid-wrap .ag-right-aligned-cell { justify-content: flex-end; }
+.grid-wrap .ag-cell-wrap-text .ag-group-value { white-space: normal; overflow-wrap: anywhere; line-height: 1.35; padding-block: var(--s-2); }
 [data-testid='sla'] { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
 /* No fixed height: the grid measures this panel (detailRowAutoHeight), and height:100% of an unmeasured row collapses it. */
 .detail { overflow-x: auto; padding: var(--s-3) var(--s-4); background: var(--card); }
@@ -426,7 +427,6 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
   background: var(--card); box-shadow: var(--shadow-2);
   animation: modal-in var(--d-base) var(--ease-out);
 }
-.modal:focus:not(:focus-visible) { outline: none; }
 .modal-wide { width: min(780px, 100%); }
 .modal header, .drawer header {
   position: sticky; top: 0; z-index: 1;

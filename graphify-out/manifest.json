@@ -984,9 +984,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/CommandGrid.tsx": {
-    "mtime": 1794117963.0939968,
-    "seen": 1794118283.2355068,
-    "ast_hash": "915896e335ea7218edd1c6d0f8ca7cc1",
+    "mtime": 1794118480.3404427,
+    "seen": 1794118868.6619217,
+    "ast_hash": "700b5b8c7aff57ec1a5bde3d0138f893",
     "semantic_hash": ""
   },
   "apps/web/src/components/Dialogs.tsx": {
