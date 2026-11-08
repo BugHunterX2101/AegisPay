@@ -223,8 +223,7 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
 .hero-stage { margin: 0; width: 100%; max-width: 600px; justify-self: center; display: grid; gap: var(--s-3); }
 .stage-frame {
   position: relative; aspect-ratio: 1 / 1; width: 100%;
-  border: 1px solid var(--border); border-radius: var(--radius-lg);
-  background: var(--card); overflow: hidden;
+  background: transparent; overflow: hidden;
 }
 .hero-canvas { display: block; width: 100%; height: 100%; }
 .hero-fallback { display: block; width: 100%; height: 100%; padding: var(--s-6); }
@@ -293,6 +292,7 @@ blockquote { margin: var(--s-2) 0; padding: var(--s-2) var(--s-3); border-left: 
 }
 .totals strong { color: var(--foreground); font-family: var(--font-mono); font-weight: 500; }
 .grid-wrap { height: 560px; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-1); }
+.grid-loading { display: grid; place-items: center; background: var(--card); color: var(--muted-foreground); font-size: 13px; }
 .row-actions { display: flex; align-items: center; gap: 6px; height: 100%; }
 [data-testid='sla'] { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
 .detail { height: 100%; overflow: auto; padding: var(--s-3) var(--s-4); background: var(--card); }

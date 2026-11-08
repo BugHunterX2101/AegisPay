@@ -10,7 +10,6 @@ import { CAPTURED_STATES, HELD_STATES, VOIDED_STATES, endOfDay, money, remaining
 import { useStore } from '../store.ts';
 import type { AuditEvent, OrderRow } from '../types.ts';
 import { loadAll } from '../useStream.ts';
-import { ShipDialog, VoidDialog } from './Dialogs.tsx';
 import { StateChip } from './StateChip.tsx';
 
 // AG Grid Enterprise runs without a key (it shows a watermark); a key can be baked in at build time.
@@ -219,14 +218,5 @@ export function CommandGrid(ctx: GridCtx) {
         />
       </div>
     </section>
-  );
-}
-
-export function GridDialogs({ ship, voidFor, close }: { ship: OrderRow | null; voidFor: OrderRow | null; close: () => void }) {
-  return (
-    <>
-      {ship && <ShipDialog order={ship} onClose={close} />}
-      {voidFor && <VoidDialog order={voidFor} onClose={close} />}
-    </>
   );
 }

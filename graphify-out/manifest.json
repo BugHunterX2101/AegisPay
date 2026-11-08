@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/App.tsx": {
-    "mtime": 1794078049.1519957,
-    "seen": 1794079248.8213747,
-    "ast_hash": "fcbaaf367cc026f15aa9e24517b0b21f",
+    "mtime": 1794109869.193968,
+    "seen": 1794110273.5594995,
+    "ast_hash": "b81ac6d1dd6f0c05c1646f12356105cf",
     "semantic_hash": ""
   },
   "apps/web/src/api.ts": {
@@ -984,9 +984,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/CommandGrid.tsx": {
-    "mtime": 1794080467.8736432,
-    "seen": 1794080616.691499,
-    "ast_hash": "f7f5bce9530ae098f6645466c449c0c5",
+    "mtime": 1794109882.7782235,
+    "seen": 1794110273.5595074,
+    "ast_hash": "21b8969566ad82d7355b1846aef80a9e",
     "semantic_hash": ""
   },
   "apps/web/src/components/Dialogs.tsx": {

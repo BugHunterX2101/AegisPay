@@ -1,17 +1,17 @@
 # Graph Report - AegisPay  (2026-11-08)
 
 ## Corpus Check
-- 199 files · ~145,931 words
+- 199 files · ~145,935 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 5 file(s) not represented in the graph (top: (none) 3, .example 1, .css 1)
 
 ## Summary
-- 1916 nodes · 5033 edges · 79 communities (73 shown, 6 thin omitted)
+- 1916 nodes · 5031 edges · 81 communities (75 shown, 6 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 137 edges (avg confidence: 0.84)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b964b3ee`
+- Built from commit: `4e5214a2`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -25,7 +25,7 @@
 - package.json
 - Worker Package Manifest
 - Agents Package Manifest
-- Payments Package Manifest
+- jobs.ts
 - Dispute Evidence Assembly
 - core/src/index.ts
 - TypeScript Base Config
@@ -33,13 +33,13 @@
 - 0001_init.sql
 - Verified Webhook Ingestion (FR-08)
 - DB Package Manifest
-- core/src/index.ts
+- db/src/index.ts
 - test
 - Core Package Manifest
 - Gatekeeper Package Manifest
 - disputes.test.ts
-- db/src/index.ts
-- buildApp
+- app.ts
+- webhooks.test.ts
 - src/mandates.ts
 - boundaries.test.ts
 - Workspace Overrides
@@ -57,13 +57,16 @@
 - CLAUDE.md
 - 0007_demo_setting.sql
 - @types/node@^26.6.6
-- payments/src/orders.ts
+- authorizations.ts
 - process.ts
 - harness.ts
 - TopBar.tsx
-- jobs.ts
+- worker.ts
+- webhook-pipeline.test.ts
 - web/src/types.ts
 - 0004_supplier_profile.sql
+- payments/src/disputes.ts
+- payments/src/orders.ts
 - payments/src/refunds.ts
 - uuidv7
 - payments/src/disputes.ts
@@ -76,7 +79,6 @@
 - TokenVault
 - jobs/package.json
 - transition
-- DomainError
 - Decision SHA-256 Hash
 - withTx
 - services
@@ -134,7 +136,7 @@
 - **Agents-Cannot-Pay Enforcement Layers** — concept_agent_boundary, docs_spec_aegispay_technical_design_document_dependency_rules, concept_gatekeeper, docs_spec_aegispay_technical_design_document_decision_hash, concept_kill_switch [INFERRED 0.85]
 - **Money-movement safety controls** — concept_agent_boundary, concept_kill_switch, docs_spec_aegispay_technical_documentation_call_wrapper, docs_spec_aegispay_technical_documentation_boundary_lint, docs_spec_aegispay_technical_documentation_idempotency [INFERRED 0.85]
 
-## Communities (79 total, 6 thin omitted)
+## Communities (81 total, 6 thin omitted)
 
 ### Community 0 - "Authorization Hold (Orders v2 intent AUTHORIZE)"
 Cohesion: 0.08
@@ -154,7 +156,7 @@ Nodes (39): AegisPay - Product Requirements Document, AG Grid (sponsor), APIMati
 
 ### Community 4 - "Web Package Manifest"
 Cohesion: 0.05
-Nodes (48): dependencies, ag-grid-community@^36.3.0, ag-grid-enterprise@^36.3.0, ag-grid-react@^36.3.0, @fontsource-variable/bodoni-moda@^5.3.0, @fontsource-variable/geist-mono@^5.3.0, @fontsource-variable/schibsted-grotesk@^5.3.0, @paypal/paypal-js@^11.3.0 (+40 more)
+Nodes (50): dependencies, ag-grid-community@^36.3.0, ag-grid-enterprise@^36.3.0, ag-grid-react@^36.3.0, @fontsource-variable/bodoni-moda@^5.3.0, @fontsource-variable/geist-mono@^5.3.0, @fontsource-variable/schibsted-grotesk@^5.3.0, @gsap/react@2.1.2 (+42 more)
 
 ### Community 5 - "API Package Manifest"
 Cohesion: 0.06
@@ -172,17 +174,17 @@ Nodes (24): dependencies, @aegis/agents@workspace:*, @aegis/core@workspace:*, @a
 Cohesion: 0.12
 Nodes (22): dependencies, @aegis/core@workspace:*, @aegis/db@workspace:*, ai@7.0.163, @ai-sdk/anthropic@4.0.97, @ai-sdk/groq@4.0.77, @paypal/agent-toolkit@1.11.0, tslib@^2.9.1 (+14 more)
 
-### Community 9 - "Payments Package Manifest"
-Cohesion: 0.14
-Nodes (17): dependencies, @aegis/core@workspace:*, @aegis/db@workspace:*, buffer-crc32@1.0.0, @paypal/paypal-server-sdk@2.5.0, pdf-lib@1.17.1, zod@4.6.7, exports (+9 more)
+### Community 9 - "jobs.ts"
+Cohesion: 0.17
+Nodes (23): ctxOf(), msg(), PERMANENT, PollResult, runCapture(), runPollOpen(), runReauthSweep(), runRefundReconcile() (+15 more)
 
 ### Community 10 - "Dispute Evidence Assembly"
 Cohesion: 0.19
 Nodes (15): Dispute Evidence Assembly, Dispute Reason to Evidence Mapping, FR-09 Dispute Defense Agent, Journey C: Dispute Defense, PayPal Disputes API (provide-evidence, require-evidence), Persona: Meera, Finance & Disputes, Defense Agent, Evidence Plan by Dispute Reason (+7 more)
 
 ### Community 11 - "core/src/index.ts"
-Cohesion: 0.10
-Nodes (25): createSelfCheck(), Probe, ProbeName, SelfCheckResult, timed(), CallOptions, CallResult, defaultDeps (+17 more)
+Cohesion: 0.07
+Nodes (34): dependencies, @aegis/core@workspace:*, @aegis/db@workspace:*, buffer-crc32@1.0.0, @paypal/paypal-server-sdk@2.5.0, pdf-lib@1.17.1, zod@4.6.7, exports (+26 more)
 
 ### Community 12 - "TypeScript Base Config"
 Cohesion: 0.12
@@ -204,9 +206,9 @@ Nodes (25): Kill Switch, Verified Webhook Ingestion (FR-08), Webhook Events Hand
 Cohesion: 0.17
 Nodes (12): dependencies, @aegis/core@workspace:*, pg@8.23.1, exports, ./testing, @aegis/core, name, private (+4 more)
 
-### Community 17 - "core/src/index.ts"
+### Community 17 - "db/src/index.ts"
 Cohesion: 0.09
-Nodes (25): logs, ZERO_HASH, verifyChain(), freshDb(), TEST_URL, TestDb, createPayPalContext(), assertSandboxBaseUrl() (+17 more)
+Nodes (20): logs, ZERO_HASH, FulfillmentDbRow, FulfillmentRow, migrate(), MigrationResult, MIGRATIONS_DIR, sha() (+12 more)
 
 ### Community 18 - "test"
 Cohesion: 0.07
@@ -221,16 +223,16 @@ Cohesion: 0.25
 Nodes (8): dependencies, @aegis/core@workspace:*, exports, @aegis/core, name, private, type, version
 
 ### Community 21 - "disputes.test.ts"
-Cohesion: 0.11
-Nodes (37): bundleView(), DisputeParams, FileParams, humanName(), registerDisputeRoutes(), 2. Failure windows, and how each is closed, Worker (decisions the spec leaves open), getDisputeSources() (+29 more)
+Cohesion: 0.09
+Nodes (41): bundleView(), DisputeParams, FileParams, humanName(), registerDisputeRoutes(), 2. Failure windows, and how each is closed, Worker (decisions the spec leaves open), DisputeSources (+33 more)
 
-### Community 22 - "db/src/index.ts"
-Cohesion: 0.11
-Nodes (18): BuildAppOptions, ApiDeps, Log, registerAuditRoutes(), registerWebhooks(), catalog, noJobs, 5b. API decisions that differ from, or go beyond, the TDD (+10 more)
+### Community 22 - "app.ts"
+Cohesion: 0.08
+Nodes (28): buildApp(), BuildAppOptions, ApiDeps, Log, registerAuditRoutes(), registerDemoRoutes(), registerWebhooks(), WEBHOOK_MAX_BYTES (+20 more)
 
-### Community 23 - "buildApp"
-Cohesion: 0.11
-Nodes (8): buildApp(), StreamHub, make(), make(), make(), noJobs, APP, STATE
+### Community 23 - "webhooks.test.ts"
+Cohesion: 0.07
+Nodes (16): model, CertCache, VerifyEventInput, CERT_URL, makeCert(), referenceCrc32(), SignOptions, signWebhook() (+8 more)
 
 ### Community 24 - "src/mandates.ts"
 Cohesion: 0.16
@@ -249,8 +251,8 @@ Cohesion: 0.17
 Nodes (12): 29-day authorization validity and 3-day honor period, CI/CD pipeline (GitHub Actions, gitleaks, Playwright), Environment configuration (zod, fail fast), Feature flags (BRYNTUM, REAUTH, ELASTIC, POLL_FALLBACK), Judge Mode (demo reset, clock offset, sandbox buyer banner), Local development and sandbox setup, /paypal:doctor report, Reauthorization (P1, FEATURE_REAUTH) (+4 more)
 
 ### Community 28 - "paypal-server.ts"
-Cohesion: 0.09
-Nodes (14): OAuthServerOptions, SeenRequest, ALLOWED_EVIDENCE_EXT, Auth, Cap, D(), Disp, Failure (+6 more)
+Cohesion: 0.08
+Nodes (24): CLIENT_ID, CLIENT_SECRET, Harness, OffsetClock, SeededOrder, startHarness(), OAuthServer, OAuthServerOptions (+16 more)
 
 ### Community 29 - "TS Project Config"
 Cohesion: 0.40
@@ -258,7 +260,7 @@ Nodes (4): exclude, extends, include, ./tsconfig.base.json
 
 ### Community 30 - "holdScene.ts"
 Cohesion: 0.08
-Nodes (32): gsap@^3.15.1, @gsap/react@2.1.2, Hero(), RingsFallback(), useHoldScene(), CHAPTERS, Lifecycle(), num() (+24 more)
+Nodes (30): gsap@^3.15.1, Hero(), RingsFallback(), useHoldScene(), CHAPTERS, Lifecycle(), num(), sumMinor() (+22 more)
 
 ### Community 31 - "rules.ts"
 Cohesion: 0.10
@@ -273,8 +275,8 @@ Cohesion: 0.15
 Nodes (17): Static and Compliance CI Checks, PayPal Sandbox Contract Tests (@sandbox), Design Principles (deterministic money, least privilege, idempotent, one truth, demo-proof), Playwright End-to-End Journeys A/B/C, Gatekeeper Tests (table, property, money, 100% branch coverage), PayPal-Request-Id Idempotency, Journeys A, B, C, Negative and Failure Tests (+9 more)
 
 ### Community 35 - "webhooks.test.ts"
-Cohesion: 0.08
-Nodes (30): isSimulatedEvent(), CERT_HOSTS, CERT_PATH_PREFIX, CERT_TTL_MS, CertCache, checkCertUrl(), crc32Decimal(), HeaderBag (+22 more)
+Cohesion: 0.12
+Nodes (30): CallDeps, CreateContextOptions, PayPalContext, assertSandboxBaseUrl(), loadPayPalConfig(), LOOPBACK, PayPalConfig, SANDBOX_BASE_URL (+22 more)
 
 ### Community 36 - "Agent Boundary / Least Privilege"
 Cohesion: 0.12
@@ -284,41 +286,53 @@ Nodes (22): Agent Boundary / Least Privilege, Agent Worker (Vercel AI SDK + Agen
 Cohesion: 0.18
 Nodes (11): Day 1 Spike Questions, Demo Clock Offset (/api/demo/clock), Sandbox Dispute Pool, External Dependencies and Fallbacks, Gap Protection Polling (every 2 minutes), Judge Mode UX, Monitoring and /status Page, Render Blueprint render.yaml (+3 more)
 
-### Community 41 - "payments/src/orders.ts"
-Cohesion: 0.10
-Nodes (32): getFulfillment(), recordReauthorization(), getOrderBundle(), capture(), getAuthorization(), isFinalClientError(), payments(), REAUTH_LEAD_MS (+24 more)
+### Community 41 - "authorizations.ts"
+Cohesion: 0.16
+Nodes (19): recordReauthorization(), getOrderBundle(), capture(), getAuthorization(), isFinalClientError(), payments(), REAUTH_LEAD_MS, reauthorize() (+11 more)
 
 ### Community 42 - "process.ts"
-Cohesion: 0.15
-Nodes (29): state(), findOrderIdByPayPalRef(), getOrder(), stateOf(), CAPTURE_REFUSED, captureIdFromLinks(), getCapture(), Json (+21 more)
+Cohesion: 0.16
+Nodes (33): registerOrderRoutes(), state(), DomainError, appendAudit(), cancelUnapprovedOrder(), recordDelivery(), recordShipment(), findOrderIdByPayPalRef() (+25 more)
 
 ### Community 43 - "harness.ts"
 Cohesion: 0.13
-Nodes (8): CATALOG, draft(), Frame, inDays(), liveModel, newMandate(), noJobs, sent
+Nodes (9): CATALOG, draft(), Frame, inDays(), liveModel, make(), newMandate(), noJobs (+1 more)
 
 ### Community 44 - "TopBar.tsx"
 Cohesion: 0.19
 Nodes (14): Footer(), Seal(), AgentToggle(), ThemeToggle(), TopBar(), apply(), initTheme(), listeners (+6 more)
 
-### Community 46 - "jobs.ts"
-Cohesion: 0.06
-Nodes (67): classifyFailure(), ctxOf(), msg(), PERMANENT, PollResult, runCapture(), runPollOpen(), runReauthSweep() (+59 more)
+### Community 45 - "worker.ts"
+Cohesion: 0.16
+Nodes (16): classifyFailure(), WorkerDeps, Log, WorkerHandle, WorkerOptions, jobKey, PAYLOAD, Uuid (+8 more)
+
+### Community 46 - "webhook-pipeline.test.ts"
+Cohesion: 0.13
+Nodes (27): runWebhookSweep(), Webhook processing (decisions the spec leaves open), claimVerifiedWebhooks(), getWebhookEvent(), listUnverifiedWebhooks(), markWebhookProcessed(), markWebhookVerified(), recordWebhookEvent() (+19 more)
 
 ### Community 47 - "web/src/types.ts"
 Cohesion: 0.17
 Nodes (19): AgentDrawer(), headline(), LABEL, DisputeDetail, AppState, StreamStatus, Toast, BundleFile (+11 more)
 
+### Community 49 - "payments/src/disputes.ts"
+Cohesion: 0.14
+Nodes (21): DisputeLink, DisputeRow, hasSubmittedBundle(), getFulfillment(), BuildResult, DisputeSync, evidenceAlreadySubmitted(), fetchDispute() (+13 more)
+
+### Community 50 - "payments/src/orders.ts"
+Cohesion: 0.14
+Nodes (14): AuthorizedHold, buildOrderRequest(), cap(), CARRIERS, CreateHoldInput, HoldCopy, HONOR_PERIOD_MS, invoiceIdFor() (+6 more)
+
 ### Community 51 - "payments/src/refunds.ts"
-Cohesion: 0.21
-Nodes (20): withAdvisoryLock(), getRefundRow(), insertRefund(), listPendingRefunds(), listRefunds(), RefundDbRow, refundedMinor(), RefundRow (+12 more)
+Cohesion: 0.12
+Nodes (28): advance(), withAdvisoryLock(), withTx(), getRefundRow(), insertRefund(), listPendingRefunds(), listRefunds(), RefundDbRow (+20 more)
 
 ### Community 52 - "uuidv7"
 Cohesion: 0.19
 Nodes (18): IdParams, isoDate(), registerAgentRoutes(), SourceBody, 1. Deviations from the spec, Decisions the spec leaves open, buildQuery(), uuidv7() (+10 more)
 
 ### Community 55 - "payments/src/disputes.ts"
-Cohesion: 0.06
-Nodes (52): 5. Test coverage notes, sha256Hex(), DisputeLink, DisputeRow, EvidenceBundleRow, EvidenceFile, hasSubmittedBundle(), assertBundleIntegrity() (+44 more)
+Cohesion: 0.08
+Nodes (34): 5. Test coverage notes, sha256Hex(), auditHash(), EvidenceFile, assertBundleIntegrity(), A4, bundleSha256(), MAX_FILE_BYTES (+26 more)
 
 ### Community 56 - "sourcing.ts"
 Cohesion: 0.05
@@ -329,32 +343,28 @@ Cohesion: 0.11
 Nodes (17): IdParams, ProposalOrderBody, VoidBody, ApiErrorSchema, CARRIERS, CreateMandateBody, CurrencySchema, DemoClockBody (+9 more)
 
 ### Community 59 - "api.test.ts"
-Cohesion: 0.13
-Nodes (17): installErrorHandling(), render(), Rendered, renderError(), WEBHOOK_MAX_BYTES, draft(), Frame, held() (+9 more)
+Cohesion: 0.14
+Nodes (16): installErrorHandling(), render(), Rendered, renderError(), draft(), Frame, held(), newMandate() (+8 more)
 
 ### Community 60 - "stream.ts"
 Cohesion: 0.12
 Nodes (24): jsonReplacer(), toJson(), AuditMessage, factMessage(), frame(), Log, parseSeq(), registerStream() (+16 more)
 
 ### Community 61 - "api/src/index.ts"
-Cohesion: 0.12
-Nodes (19): main(), main(), jsonLog(), modelFromEnv(), model, DisputeSources, SourcesDbRow, migrate() (+11 more)
+Cohesion: 0.19
+Nodes (13): main(), main(), jsonLog(), 5b. API decisions that differ from, or go beyond, the TDD, modelFromEnv(), addDays(), DAY_MS, OffsetClock (+5 more)
 
 ### Community 62 - "TokenVault"
-Cohesion: 0.13
-Nodes (14): Clock, Db, CallDeps, CreateContextOptions, PayPalContext, sameOrigin(), PayPalConfig, REFRESH_WINDOW_MS (+6 more)
+Cohesion: 0.14
+Nodes (8): Clock, REFRESH_WINDOW_MS, Token, tokenResponse, TokenVault, TokenVaultOptions, MutableClock, vault()
 
 ### Community 63 - "jobs/package.json"
 Cohesion: 0.22
 Nodes (10): dependencies, pg-boss@12.38.0, zod@4.6.7, exports, pg-boss, zod, name, private (+2 more)
 
 ### Community 64 - "transition"
-Cohesion: 0.11
-Nodes (29): advance(), awaitingApproval(), delivered(), held(), delivered(), held(), transition(), withTx() (+21 more)
-
-### Community 65 - "DomainError"
-Cohesion: 0.22
-Nodes (14): registerDemoRoutes(), registerOrderRoutes(), DomainError, appendAudit(), auditHash(), resetDemo(), setClockOffsetMs(), cancelUnapprovedOrder() (+6 more)
+Cohesion: 0.14
+Nodes (21): awaitingApproval(), cert, delivered(), held(), state(), delivered(), held(), authorizeHold() (+13 more)
 
 ### Community 67 - "Decision SHA-256 Hash"
 Cohesion: 0.40
@@ -397,8 +407,8 @@ Cohesion: 0.16
 Nodes (16): APP_URL, call(), openSession(), printSelfCheck(), ProbeResult, SelfCheckBody, Session, CLOSED (+8 more)
 
 ### Community 80 - "api"
-Cohesion: 0.18
-Nodes (29): api(), ApiError, errorMessage(), getSession(), App(), Stream(), Toasts(), Ambient() (+21 more)
+Cohesion: 0.19
+Nodes (29): api(), ApiError, errorMessage(), getSession(), App(), CommandGrid, Stream(), Toasts() (+21 more)
 
 ### Community 83 - "web/tsconfig.json"
 Cohesion: 0.25
@@ -442,11 +452,11 @@ _Questions this graph is uniquely positioned to answer:_
   _44 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Authorization Hold (Orders v2 intent AUTHORIZE)` be split into smaller, more focused modules?**
   _Cohesion score 0.07965860597439545 - nodes in this community are weakly interconnected._
-- **Why does `vitest` connect `core/src/index.ts` to `package.json`, `core/src/index.ts`, `disputes.test.ts`, `db/src/index.ts`, `buildApp`, `src/mandates.ts`, `boundaries.test.ts`, `rules.ts`, `webhooks.test.ts`, `payments/src/orders.ts`, `harness.ts`, `jobs.ts`, `payments/src/disputes.ts`, `sourcing.ts`, `api.test.ts`, `api/src/index.ts`, `TokenVault`, `transition`, `DomainError`, `withTx`, `order-state.test.ts`, `ingest.test.ts`, `devDependencies`?**
+- **Why does `vitest` connect `db/src/index.ts` to `package.json`, `core/src/index.ts`, `disputes.test.ts`, `app.ts`, `webhooks.test.ts`, `src/mandates.ts`, `boundaries.test.ts`, `rules.ts`, `webhooks.test.ts`, `authorizations.ts`, `process.ts`, `harness.ts`, `webhook-pipeline.test.ts`, `payments/src/orders.ts`, `payments/src/refunds.ts`, `payments/src/disputes.ts`, `sourcing.ts`, `api.test.ts`, `api/src/index.ts`, `TokenVault`, `transition`, `withTx`, `order-state.test.ts`, `ingest.test.ts`, `devDependencies`?**
   _High betweenness centrality (0.158) - this node is a cross-community bridge._
 - **Should `Decision Record D1-D13` be split into smaller, more focused modules?**
   _Cohesion score 0.11229946524064172 - nodes in this community are weakly interconnected._
-- **Why does `DomainError` connect `DomainError` to `API Package Manifest`, `core/src/index.ts`, `core/src/index.ts`, `disputes.test.ts`, `db/src/index.ts`, `src/mandates.ts`, `webhooks.test.ts`, `payments/src/orders.ts`, `process.ts`, `jobs.ts`, `payments/src/refunds.ts`, `uuidv7`, `payments/src/disputes.ts`, `sourcing.ts`, `schemas.ts`, `api.test.ts`, `api/src/index.ts`, `TokenVault`, `transition`, `ingest.test.ts`, `db/src/orders.ts`?**
+- **Why does `DomainError` connect `process.ts` to `API Package Manifest`, `jobs.ts`, `core/src/index.ts`, `db/src/index.ts`, `disputes.test.ts`, `app.ts`, `webhooks.test.ts`, `src/mandates.ts`, `webhooks.test.ts`, `authorizations.ts`, `webhook-pipeline.test.ts`, `payments/src/disputes.ts`, `payments/src/orders.ts`, `payments/src/refunds.ts`, `uuidv7`, `payments/src/disputes.ts`, `sourcing.ts`, `schemas.ts`, `api.test.ts`, `api/src/index.ts`, `TokenVault`, `transition`, `ingest.test.ts`, `db/src/orders.ts`?**
   _High betweenness centrality (0.050) - this node is a cross-community bridge._
 - **Should `Channel3 (sourcing catalog API/MCP)` be split into smaller, more focused modules?**
   _Cohesion score 0.08708708708708708 - nodes in this community are weakly interconnected._

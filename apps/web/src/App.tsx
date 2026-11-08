@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { api, errorMessage, getSession } from './api.ts';
 import { AgentDrawer } from './components/AgentDrawer.tsx';
 import { Ambient } from './components/Ambient.tsx';
-import { CommandGrid, GridDialogs } from './components/CommandGrid.tsx';
+import { ShipDialog, VoidDialog } from './components/Dialogs.tsx';
 import { EvidenceModal } from './components/EvidenceModal.tsx';
 import { Footer } from './components/Footer.tsx';
 import { Hero } from './components/Hero.tsx';
@@ -13,6 +13,9 @@ import { JudgeBanner, TopBar, refreshSelfCheck } from './components/TopBar.tsx';
 import { useStore } from './store.ts';
 import type { OrderRow } from './types.ts';
 import { loadAll, useStream } from './useStream.ts';
+
+// AG Grid Enterprise is most of the bundle; it loads in its own chunk so the hero and copy paint first.
+const CommandGrid = lazy(() => import('./components/CommandGrid.tsx').then((m) => ({ default: m.CommandGrid })));
 
 /** Mounted only once the session cookie exists, so the stream is opened as the same visitor as every other request. */
 function Stream() {
@@ -82,7 +85,9 @@ export function App() {
             </header>
             <JudgeBanner />
             <MandateStrip onApprove={setApprove} />
-            <CommandGrid approve={setApprove} ship={setShip} voidHold={setVoidFor} evidence={openEvidence} />
+            <Suspense fallback={<div className="grid-wrap grid-loading" aria-busy="true">Loading the command grid…</div>}>
+              <CommandGrid approve={setApprove} ship={setShip} voidHold={setVoidFor} evidence={openEvidence} />
+            </Suspense>
           </div>
         </section>
         <div className="wrap">
@@ -91,7 +96,8 @@ export function App() {
       </main>
       <Footer />
       <AgentDrawer />
-      <GridDialogs ship={ship} voidFor={voidFor} close={close} />
+      {ship && <ShipDialog order={ship} onClose={close} />}
+      {voidFor && <VoidDialog order={voidFor} onClose={close} />}
       {approve && <PayPalApproveDialog order={approve} onClose={() => setApprove(null)} />}
       {evidenceFor && <EvidenceModal disputeId={evidenceFor} onClose={() => openEvidence(null)} />}
       <Toasts />

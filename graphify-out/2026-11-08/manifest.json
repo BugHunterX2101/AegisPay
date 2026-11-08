@@ -594,9 +594,9 @@
     "semantic_hash": ""
   },
   "docs/DEVIATIONS.md": {
-    "mtime": 1794065058.5952106,
-    "seen": 1794079248.8220272,
-    "ast_hash": "3de00f68b3123cff40c210e87ec0663f",
+    "mtime": 1794079274.5822406,
+    "seen": 1794080616.691819,
+    "ast_hash": "0272ff068f6821731fa9f89f4064debf",
     "semantic_hash": ""
   },
   "packages/db/src/catalog.ts": {
@@ -984,9 +984,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/CommandGrid.tsx": {
-    "mtime": 1794075229.2361107,
-    "seen": 1794079248.8213913,
-    "ast_hash": "f07f83d375219dce155d63a226c106e6",
+    "mtime": 1794080467.8736432,
+    "seen": 1794080616.691499,
+    "ast_hash": "f7f5bce9530ae098f6645466c449c0c5",
     "semantic_hash": ""
   },
   "apps/web/src/components/Dialogs.tsx": {
