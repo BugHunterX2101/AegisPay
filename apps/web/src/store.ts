@@ -32,6 +32,7 @@ interface AppState {
 }
 
 const FEED_MAX = 200;
+const DRAWER_HASH = '#activity';
 let toastSeq = 0;
 
 export const useStore = create<AppState>((set) => ({
@@ -42,7 +43,7 @@ export const useStore = create<AppState>((set) => ({
   selfcheck: null,
   stream: 'connecting',
   offsetDays: 0,
-  drawerOpen: false,
+  drawerOpen: window.location.hash === DRAWER_HASH,
   evidenceFor: null,
   toasts: [],
   setSession: (session) => set({ session }),
@@ -60,7 +61,13 @@ export const useStore = create<AppState>((set) => ({
   setSelfcheck: (selfcheck) => set({ selfcheck }),
   setStream: (stream) => set({ stream }),
   setOffsetDays: (offsetDays) => set({ offsetDays }),
-  setDrawer: (drawerOpen) => set({ drawerOpen }),
+  setDrawer: (drawerOpen) => {
+    // The drawer is a place worth linking to: #activity opens it on load, and it keeps the address in step (no history entry, no scroll jump).
+    const h = window.location.hash;
+    if (drawerOpen && h !== DRAWER_HASH) window.history.replaceState(null, '', DRAWER_HASH);
+    else if (!drawerOpen && h === DRAWER_HASH) window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    set({ drawerOpen });
+  },
   openEvidence: (evidenceFor) => set({ evidenceFor }),
   toast: (kind, text) => set((s) => ({ toasts: [...s.toasts, { id: ++toastSeq, kind, text }].slice(-4) })),
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),

@@ -60,6 +60,8 @@ main.center { display: grid; place-items: center; min-height: 60vh; padding: var
 }
 /* Appears the instant it takes focus: a keyboard user should never tab onto something that is still sliding in. */
 .skip:focus { transform: none; color: var(--background); }
+/* The skip link sits on the page's own foreground colour, so the ring takes the accent and is offset clear of the fill. */
+.skip:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 
 /* ---------- controls ---------- */
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -81,8 +83,9 @@ button.primary { background: var(--primary); border-color: var(--primary); color
 button.primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
 button.danger { color: var(--tone-garnet); border-color: var(--tone-garnet); }
 button.danger:hover:not(:disabled) { background: var(--tone-garnet-bg); border-color: var(--tone-garnet); }
-button.sm { min-height: 30px; padding: 0 var(--s-3); font-size: 13px; }
-button.lg { min-height: 52px; padding: 0 var(--s-5); font-size: 16px; }
+/* One height scale on the 8px grid: 32 (dense rows) / 40 (default) / 48 (lg, PayPal, the mandate strip). */
+button.sm { min-height: 32px; padding: 0 var(--s-3); font-size: 13px; }
+button.lg { min-height: 48px; padding: 0 var(--s-5); font-size: 16px; }
 button.icon { min-height: 36px; min-width: 36px; padding: 0; border-color: transparent; background: transparent; }
 button.icon:hover:not(:disabled) { border-color: var(--border); background: var(--card-2); }
 button.paypal {
@@ -509,6 +512,9 @@ button.toast-error { border-left-color: var(--tone-garnet); color: var(--tone-ga
   .link-arrow, .judge button.sm { min-height: 44px; }
   button.pill { position: relative; }
   button.pill::before { content: ''; position: absolute; inset: -5px 0; }
+  /* Grid row actions: the 32px look stays, the tap area grows to 48px tall (rows are tall enough; buttons keep their 6px gap sideways). */
+  .row-actions button { position: relative; }
+  .row-actions button::before { content: ''; position: absolute; inset: -8px 0; }
 }
 
 /* The grid's own focus change is a faint shadow (about 2:1); keyboard focus on a header cell gets the page ring. */
