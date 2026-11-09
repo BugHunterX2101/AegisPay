@@ -39,8 +39,21 @@ The hosted demo's order rows for this run were later cleared by a Judge Mode res
   and `provide_supporting_info`, spelled with underscores. It offers no `provide_evidence` and no `require_evidence` link,
   so the sandbox-only status switch cannot be used on this case.
 - AegisPay now answers such a case with `provide-supporting-info`, chosen from those live links (DEVIATIONS 5f).
-  `accept_claim` is never called. The new path is covered by tests against the local double. It has **not** yet been sent
-  to PayPal, because the disputed order no longer exists in the hosted ledger (see above).
+  `accept_claim` is never called.
+- **Sent live on 2026-11-09.** `packages/payments/test/dispute-supporting-info.sandbox.test.ts` rebuilt the disputed order
+  in a fresh local ledger from PayPal's own records and ran the product's sync, build, review, submit and read-back
+  against this dispute:
+
+  | Check | Result | `debug_id` |
+  |-------|--------|------------|
+  | `POST /v1/customer/disputes/PP-R-EVA-10196999/provide-supporting-info`: multipart `input` (`{"notes": ...}`, `input.json`) plus `fulfillment-record.pdf` | HTTP 200 | `f64330269d1dc` |
+  | Read-back (`GET` the dispute) | `supporting_info[]` 0 to 1, entry `SUBMITTED_BY_SELLER` provided 2026-11-09T02:37:55Z with our notes and the PDF. Still `UNDER_REVIEW` / `CHARGEBACK`, still offering `provide_supporting_info` and `accept_claim` | n/a |
+
+  - **Fixture limits.** The carrier is `OTHER`, because PayPal does not return a tracker's carrier. Delivery is
+    `SIMULATED`. The notes say it is a contract test.
+  - **Not covered.** The hosted demo's own buttons did not send this answer.
+  - **Re-running.** Each run that reaches the POST adds an entry, so the file runs only with
+    `SANDBOX_WRITES=1 SANDBOX_DISPUTE_WRITES=1`.
 
 ## 3. Live checks added on 2026-11-08
 
@@ -80,6 +93,6 @@ Summary of this manual review: 0 critical · 1 warning (justified above) · 1 no
 These paths are tested on every `pnpm test` against `packages/payments/test/paypal-server.ts`, which implements PayPal's
 documented rules, but have not been seen against the real sandbox:
 
-- `provide-evidence` and `provide-supporting-info` submissions, and the read-back after them.
+- `provide-evidence` submissions. (`provide-supporting-info` and its read-back were sent live on 2026-11-09, see section 2.)
 - Refund `PENDING` -> `COMPLETED` settlement.
 - A second tracking POST for the same capture.

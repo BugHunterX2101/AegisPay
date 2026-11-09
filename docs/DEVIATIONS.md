@@ -52,7 +52,7 @@ None of these can be settled without a buyer-approved transaction and a buyer-fi
 |------|------------------|----------------------------------|
 | Spelling of the provide-evidence link `rel` | Normalise `_` and `-`, so `provide_evidence` and `provide-evidence` both match. **Observed 2026-11-08:** the live sandbox spells action rels with an underscore (`accept_claim`, `provide_supporting_info` on PP-R-EVA-10196999), so the normalisation is needed | Submit refuses with "no provide-evidence link" and sends nothing |
 | How `evidences[].documents` refers to uploaded files | Our best reading of the docs | PayPal rejects the POST with a 4xx; nothing is submitted |
-| Whether the multipart `input` part's filename (`input.json`) is accepted | Sent as `application/json` with that filename | Same 4xx |
+| Whether the multipart `input` part's filename (`input.json`) is accepted | Sent as `application/json` with that filename. **Confirmed 2026-11-09** for `provide-supporting-info` (HTTP 200, see 5f); `provide-evidence` uses the same multipart builder but has not been sent live | Same 4xx |
 | Shape of `refund_ids` on a dispute | Parsed defensively | Refund linkage on a dispute is not shown |
 | Whether the id `simulate-event` returns is the id later delivered | Not relied upon | Only matters for delivery-id de-duplication tests |
 | Refund 422 issue names | Only `INVALID_RESOURCE_ID` (404) is confirmed | A 422 would surface as a generic PayPal error |
@@ -142,6 +142,15 @@ None of these can be settled without a buyer-approved transaction and a buyer-fi
   - After a committed submission the dispute is read back from PayPal and what it now lists is audited (`EVIDENCE_READBACK`: counts of `evidences[]` / `supporting_info[]` before and after, status, stage, offered actions). A failed read-back never undoes a submission.
   - The order moves `DISPUTED -> EVIDENCE_SUBMITTED` either way, so PayPal's later outcome maps to `RESOLVED_WON/LOST`.
   - Tests: `disputes.test.ts` ("answering a dispute PayPal is reviewing"), against a PayPal double that now offers the live-observed links.
+- **Proven live (2026-11-09).** `dispute-supporting-info.sandbox.test.ts` answered PP-R-EVA-10196999 for real with no buyer login. It picks, from PayPal's live dispute list, an open dispute offering `provide_supporting_info` in a supporting-info stage, then rebuilds the order behind it in a fresh local ledger from PayPal's own records:
+  - capture `6GK74474NS2133130`, its authorization and order;
+  - item and amount (5.00 USD);
+  - tracking number `AEGIS063607862`, which is on PayPal's tracker for that order.
+
+  It then runs the product's own sync, build, review, submit and read-back against the sandbox.
+  - **What PayPal answered.** HTTP 200 (debug id `f64330269d1dc`). The multipart shape (`input` part `{"notes": ...}` as `input.json`, plus `file1` = `fulfillment-record.pdf`) is accepted. The read-back shows `supporting_info[]` going 0 to 1 (`confirmed: true`). A separate GET shows the entry as `SUBMITTED_BY_SELLER` with our notes and the PDF. The dispute stays `UNDER_REVIEW` / `CHARGEBACK` and still offers `provide_supporting_info` and `accept_claim`.
+  - **What it does not prove.** The ledger was rebuilt locally, not by the hosted demo's own flow. PayPal does not return a tracker's carrier, so the fixture says `OTHER`. Delivery is `SIMULATED`. The notes sent to PayPal say it is a contract test. `provide-evidence` (a dispute in `WAITING_FOR_SELLER_RESPONSE`) is still only covered by the local double. As of the run, PayPal had sent no webhook for the update.
+  - **One answer per run.** PayPal keeps offering the action, so every run that reaches the POST adds another entry. The file therefore needs its own flag and is not part of a plain `pnpm test:sandbox`: `SANDBOX_WRITES=1 SANDBOX_DISPUTE_WRITES=1 pnpm vitest run -c vitest.sandbox.config.ts packages/payments/test/dispute-supporting-info.sandbox.test.ts`.
 
 ## 5g. Front-end redesign: decisions that go beyond the TDD
 
@@ -158,7 +167,7 @@ Each claim was checked against the code, PayPal's own documents (`commands/docto
 
 | Proposal | Decision | Evidence |
 |---|---|---|
-| Route dispute answers by HATEOAS links (INQUIRY vs CHARGEBACK) | **Built** | See 5f. Live dispute offers only `accept_claim` / `provide_supporting_info` |
+| Route dispute answers by HATEOAS links (INQUIRY vs CHARGEBACK) | **Built** | See 5f. Live dispute offers only `accept_claim` / `provide_supporting_info`. The `provide-supporting-info` answer was sent to it live on 2026-11-09 (HTTP 200, read back) |
 | Read-back after submitting evidence | **Built** (`EVIDENCE_READBACK`) | Records what PayPal lists; it never claims more than that |
 | `/paypal:doctor`: separate 422 `INSTRUMENT_DECLINED` | **Built** | `authorizeHold` maps it to `INSTRUMENT_DECLINED` (422), never retried, audited (`HOLD_INSTRUMENT_DECLINED`); the next authorize uses attempt n+1, so a new `PayPal-Request-Id` (the old one could replay the stored decline). Worker and webhook backstop treat it as "wait for the buyer". The dialog sends the buyer back to PayPal. Live: `declined.sandbox.test.ts` (sandbox `PayPal-Mock-Response` returns 422 with `details[].issue = INSTRUMENT_DECLINED`; it skips unless `PAYPAL_WRITES_ENABLED=true`, which `.env` leaves off, so run it with `PAYPAL_WRITES_ENABLED=true pnpm vitest run -c vitest.sandbox.config.ts packages/payments/test/declined.sandbox.test.ts`. Passed live 2026-11-08) |
 | `/paypal:doctor`: `findEligibleMethods()` before rendering | **Built** | `PayPalApprove.tsx` |
@@ -196,9 +205,13 @@ Each claim was checked against the code, PayPal's own documents (`commands/docto
 ## 6. What is needed from the owner
 
 1. ~~A sandbox **buyer** login (or approve one order manually)~~ Done on 2026-11-07: order `1DD80013YX7168537` was buyer-approved, authorized (`9RT36463D57941302`) and captured (`6GK74474NS2133130`). IDs confirmed by GET at PayPal on 2026-11-08 ([SANDBOX_VERIFICATION.md](SANDBOX_VERIFICATION.md)).
-2. ~~A **buyer-filed sandbox dispute**~~ Done: PP-R-EVA-10196999 (see 5f). The hosted demo's order rows were later cleared by a Judge Mode reset (the audit chain still verifies, 547 rows). That is why the new supporting-info path has not yet been exercised live: it needs a disputed order in the ledger, which means a new buyer-approved order and a new buyer-filed dispute.
+2. ~~A **buyer-filed sandbox dispute**~~ Done: PP-R-EVA-10196999 (see 5f). The hosted demo's order rows were later cleared by a Judge Mode reset (the audit chain still verifies, 547 rows). The dispute itself stays open at PayPal, and on 2026-11-09 the supporting-info path was proven live against it (see 5f and item 6).
 3. ~~A **public HTTPS URL** for the webhook listener~~ Done: the Render deploy; deliveries are signature-verified there.
 4. ~~The Channel3 API key and an LLM key~~ Provided and verified live (`pnpm test:sandbox`). Without them the agent routes answer `AGENT_UNAVAILABLE` rather than inventing results. Please confirm the second pasted string was the Channel3 key.
 5. **Rotate or revoke** the GitHub token, the PayPal sandbox secret and the Groq key that were pasted in chat, after the hackathon.
-6. To prove `provide-supporting-info` live: a new buyer-approved order on the hosted demo, then a buyer-filed dispute on it from the sandbox buyer account (PayPal's sandbox dispute dashboard). Do not run `pnpm seed` or press "Reset demo" on the hosted demo until it has been submitted.
-7. ~~A sandbox **buyer** login for the 2026-11-08 correctness fixes~~ Not needed. They ran live on 2026-11-08 through PayPal's own guest checkout, with no buyer login: the concurrent capture lock, void, and PayPal's answer to an early reauthorization (see section 4). Run them with `SANDBOX_WRITES=1 pnpm test:sandbox`. `approved-hold.sandbox.test.ts` uses `PAYPAL_SANDBOX_BUYER_EMAIL` / `PAYPAL_SANDBOX_BUYER_PASSWORD` when they are in `.env`, and guest checkout otherwise. A buyer account is still needed for item 6, because only a buyer can file a dispute.
+6. ~~To prove `provide-supporting-info` live~~ Done on 2026-11-09 without a buyer, against the still-open PP-R-EVA-10196999 (see 5f). Two things are left, and only these need a sandbox buyer account (optional):
+   - The same answer sent through the hosted demo's own buttons, which needs a disputed order in the hosted ledger.
+   - A `provide-evidence` answer, which needs a dispute that PayPal puts in `WAITING_FOR_SELLER_RESPONSE`.
+
+   Steps: a new buyer-approved order on the hosted demo, then a buyer-filed dispute on it from the sandbox buyer account. Do not run `pnpm seed` or press "Reset demo" on the hosted demo until it has been answered.
+7. ~~A sandbox **buyer** login for the 2026-11-08 correctness fixes~~ Not needed. They ran live on 2026-11-08 through PayPal's own guest checkout, with no buyer login: the concurrent capture lock, void, and PayPal's answer to an early reauthorization (see section 4). Run them with `SANDBOX_WRITES=1 pnpm test:sandbox`. `approved-hold.sandbox.test.ts` uses `PAYPAL_SANDBOX_BUYER_EMAIL` / `PAYPAL_SANDBOX_BUYER_PASSWORD` when they are in `.env`, and guest checkout otherwise. A buyer account is still needed for what is left of item 6, because only a buyer can file a dispute.
