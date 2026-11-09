@@ -17,6 +17,7 @@ import { buildEvidenceBundle, bundleTarget, reviewEvidenceBundle, submitEvidence
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { ApiDeps } from '../deps.ts';
+import { humanName } from '../session.ts';
 
 const DisputeParams = z.object({ id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/) });
 const FileParams = z.object({ bundleId: z.string().uuid(), name: z.string().regex(/^[a-z0-9-]+\.pdf$/) });
@@ -38,9 +39,6 @@ function bundleView(b: EvidenceBundleRow) {
     submittedAt: b.submittedAt,
   };
 }
-
-/** `user:<sid>` -> `<sid>`: the review and submit functions add the prefix themselves when they write the audit row. */
-const humanName = (actor: string): string => actor.replace(/^user:/, '');
 
 /**
  * Dispute routes. PayPal is the source of truth for a dispute; these routes pull it, answer from our own records, and

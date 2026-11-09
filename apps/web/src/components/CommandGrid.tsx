@@ -6,7 +6,7 @@ import { AgGridReact } from 'ag-grid-react';
 import type { CustomCellRendererProps, CustomDetailCellRendererProps } from 'ag-grid-react';
 import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { api, errorMessage } from '../api.ts';
-import { CAPTURED_STATES, HELD_STATES, VOIDED_STATES, endOfDay, formatDay, formatStamp, humanize, money, remaining, shortHash, sumMinor, useAppNow } from '../format.ts';
+import { CAPTURED_STATES, HELD_STATES, VOIDED_STATES, endOfDay, formatDay, formatStamp, humanize, money, remaining, shortHash, sumMinor, useAppNow, useWallNow } from '../format.ts';
 import { useStore } from '../store.ts';
 import type { AuditEvent, OrderRow } from '../types.ts';
 import { loadAll } from '../useStream.ts';
@@ -102,12 +102,13 @@ function ActionsCell(p: CustomCellRendererProps<OrderRow>) {
 }
 
 function SlaCell(p: CustomCellRendererProps<OrderRow>) {
-  const now = useAppNow();
+  const now = useAppNow(); // the delivery SLA follows the demo clock, as the worker's breach sweep does
+  const wall = useWallNow(); // the authorization expires on PayPal's real clock; time travel does not move it
   const o = p.data;
   if (!o || !isOrder(p) || (o.state !== 'HELD' && o.state !== 'IN_TRANSIT')) return null;
   const r = remaining(endOfDay(o.deliverBy), now);
   if (!r) return null;
-  const auth = remaining(o.authExpiresAt, now);
+  const auth = remaining(o.authExpiresAt, wall);
   return (
     <span className={r.overdue ? 'overdue' : ''} title={auth ? `Authorization expires in ${auth.text}` : undefined} data-testid="sla">
       {r.overdue ? 'SLA breached ' : 'SLA '}

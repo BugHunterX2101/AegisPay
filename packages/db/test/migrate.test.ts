@@ -37,11 +37,11 @@ describe('migrate', () => {
     const first = await migrate(db);
     expect(first.applied).toEqual([
       '0001_init.sql', '0002_audit_guard.sql', '0003_indexes.sql', '0004_supplier_profile.sql', '0005_refund.sql',
-      '0006_webhook_attempts.sql', '0007_demo_setting.sql',
+      '0006_webhook_attempts.sql', '0007_demo_setting.sql', '0008_lookup_indexes.sql',
     ]);
     const second = await migrate(db);
     expect(second.applied).toEqual([]);
-    expect(second.skipped).toHaveLength(7);
+    expect(second.skipped).toHaveLength(8);
   });
 
   it('creates every table in the spec and seeds the default supplier profile', async () => {
@@ -86,6 +86,6 @@ describe('migrate', () => {
     const db = await emptySchemaPool();
     const results = await Promise.all([migrate(db), migrate(db), migrate(db)]);
     const appliedCounts = results.map((r) => r.applied.length).sort();
-    expect(appliedCounts).toEqual([0, 0, 7]);
+    expect(appliedCounts).toEqual([0, 0, 8]);
   });
 });

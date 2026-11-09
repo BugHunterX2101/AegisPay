@@ -241,18 +241,53 @@ describe('runSlaWatch', () => {
 });
 
 describe('runReauthSweep', () => {
-  it('leaves a fresh hold alone, then reauthorizes it once its honor period is about to end', async () => {
+  const reauths = () => h.pp.seen.filter((c) => c.path.endsWith('/reauthorize'));
+  /** An app clock of its own, so Judge Mode time travel can be told apart from PayPal's (real) time. */
+  const appClock = (offsetMs: number) => ({ now: () => new Date(Date.now() + offsetMs) });
+
+  it('never reauthorizes inside the honor period (PayPal refuses it there), then does once it has ended', async () => {
     const s = await held();
     expect((await runReauthSweep(deps)).reauthorized).not.toContain(s.orderId);
-    expect(h.pp.seen.filter((c) => c.path.endsWith('/reauthorize'))).toHaveLength(0);
 
-    h.clock.offsetMs = 2.95 * DAY; // inside the 2 h lead of the 3-day honor period; the 29-day authorization is still valid
+    h.clock.offsetMs = 2.95 * DAY; // the old "2 h before the end" window: still inside the honor period
+    expect((await runReauthSweep(deps)).reauthorized).not.toContain(s.orderId);
+    expect(reauths()).toHaveLength(0);
+
+    h.clock.offsetMs = 3.05 * DAY; // the 3-day honor period is over; the 29-day authorization is still valid
     const r = await runReauthSweep(deps);
     expect(r.reauthorized).toContain(s.orderId);
     expect(r.errors).toEqual([]);
     const row = (await getOrder(h.t.db, s.orderId))!;
     expect(row.authorizationHistory).toHaveLength(2);
     expect(row.authorizationId).not.toBe(s.authorizationId);
+  });
+
+  it('reauthorizes at most once: PayPal allows one, even after the new authorization honor period ends', async () => {
+    const s = await held();
+    h.clock.offsetMs = 3.05 * DAY;
+    expect((await runReauthSweep(deps)).reauthorized).toContain(s.orderId);
+    h.clock.offsetMs = 6.5 * DAY; // the reauthorized authorization's own 3-day honor period is over too
+    const r = await runReauthSweep(deps);
+    expect(r.reauthorized).not.toContain(s.orderId);
+    expect(r.errors).toEqual([]);
+    expect(reauths()).toHaveLength(1);
+    expect((await getOrder(h.t.db, s.orderId))!.authorizationHistory).toHaveLength(2);
+  });
+
+  it('Judge Mode time travel never triggers a PayPal reauthorization: the honor period is PayPal time', async () => {
+    const s = await held();
+    // The app clock jumps four days ahead; PayPal's (the context's) clock does not move.
+    const r = await runReauthSweep({ ...deps, clock: appClock(4 * DAY) });
+    expect(r.reauthorized).not.toContain(s.orderId);
+    expect(reauths()).toHaveLength(0);
+  });
+
+  it('leaves a hold whose delivery SLA has passed for a human to void instead of extending it', async () => {
+    const s = await held({ deliverBy: '2036-11-25' });
+    h.clock.offsetMs = 3.05 * DAY; // PayPal would accept a reauthorization now...
+    const r = await runReauthSweep({ ...deps, clock: appClock(PAST_ALL_2036) }); // ...but the app's SLA is already breached
+    expect(r.reauthorized).not.toContain(s.orderId);
+    expect((await getOrder(h.t.db, s.orderId))!.authorizationHistory).toHaveLength(1);
   });
 });
 

@@ -16,6 +16,7 @@ import { authorizeHold, createHold } from '@aegis/payments';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { ApiDeps } from '../deps.ts';
+import { humanName } from '../session.ts';
 
 const IdParams = z.object({ id: z.string().uuid() });
 const ProposalOrderBody = z.object({ decisionSha256: z.string().regex(/^[0-9a-f]{64}$/) });
@@ -60,7 +61,7 @@ export function registerOrderRoutes(app: FastifyInstance, d: ApiDeps): void {
     const order = await getOrder(d.db, id);
     if (!order) throw new DomainError('NOT_FOUND', `Order ${id} not found`);
     if (!order.paypalOrderId) throw new DomainError('BAD_STATE', 'no PayPal order yet: create the hold first');
-    const authorization = await authorizeHold(d.ctx, id, order.paypalOrderId, { approvedBy: req.actor });
+    const authorization = await authorizeHold(d.ctx, id, order.paypalOrderId, { approvedBy: humanName(req.actor) });
     return { order: await getOrderGridRow(d.db, id), authorization };
   });
 
@@ -108,7 +109,7 @@ export function registerOrderRoutes(app: FastifyInstance, d: ApiDeps): void {
         entityId: id,
         payload: { reason: body.reason, confirmedBy: req.actor },
       });
-      await d.jobs.void(id, { reason: body.reason, confirmedBy: req.actor }, tx);
+      await d.jobs.void(id, { reason: body.reason, confirmedBy: humanName(req.actor) }, tx);
       return true;
     }, d.db);
     return reply.code(queued ? 202 : 200).send({ queued, order: await getOrderGridRow(d.db, id) });

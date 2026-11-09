@@ -90,7 +90,13 @@ function JudgePanel() {
     const open = Object.values(orders).filter((o) => o.state === 'HELD' || o.state === 'IN_TRANSIT');
     if (open.length === 0) return toast('error', 'No held order is waiting on delivery');
     const earliest = Math.min(...open.map((o) => new Date(endOfDay(o.deliverBy)).getTime()));
-    return setClock(Math.floor((earliest - Date.now()) / DAY_MS) + 1);
+    // floor(x) + 1 > x, so real now + needed days is strictly past the deadline (both sides UTC, like the worker's sweep).
+    const needed = Math.floor((earliest - Date.now()) / DAY_MS) + 1;
+    if (needed > 60) return toast('error', `The earliest deadline is ${needed} days out; the demo clock goes up to +60 days`);
+    // Already past in real time: there is nothing to jump to, and a silent no-op click would look broken.
+    if (needed <= offsetDays) return toast('ok', 'The earliest open hold is already past its delivery deadline; the SLA watch flags it on its next pass');
+    // needed > offsetDays here, so the clock only ever moves forward (moving it back would un-breach a deadline).
+    return setClock(needed);
   };
 
   const [confirmReset, setConfirmReset] = useState(false);
@@ -190,9 +196,11 @@ export function JudgeBanner() {
   const steps: Array<[string, boolean]> = [
     ['Mandate drafted', list.length > 0 || feed.some((f) => f.kind === 'mandate.draft')],
     ['Gatekeeper passed an offer', list.some((o) => o.gatePass === true)],
-    ['Buyer approved: hold placed', past('HELD', 'IN_TRANSIT', 'DELIVERED', 'SETTLED', 'VOIDED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED')],
-    ['Delivery recorded', list.some((o) => o.deliveredAt) || past('DELIVERED', 'SETTLED')],
-    ['Captured after the proof gate', past('SETTLED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST')],
+    // Every state at or after the step counts (order-state.ts): FAILED is only reachable from DELIVERED, and REFUNDED only
+    // from SETTLED or DISPUTED, so a failed capture still placed a hold and recorded delivery, and a refund was captured.
+    ['Buyer approved: hold placed', past('HELD', 'IN_TRANSIT', 'DELIVERED', 'SETTLED', 'FAILED', 'VOIDED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED')],
+    ['Delivery recorded', list.some((o) => o.deliveredAt) || past('DELIVERED', 'SETTLED', 'FAILED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED')],
+    ['Captured after the proof gate', past('SETTLED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED')],
   ];
   return (
     <div className="banner" data-testid="judge-banner">

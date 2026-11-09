@@ -194,7 +194,9 @@ const WRITERS: Record<DocumentKind, Writer> = {
     p.title('Ledger extract');
     p.heading('One approval, one authorization, one capture');
     p.field('PayPal order', l.paypalOrderId ?? 'not recorded');
-    p.field('Buyer approval (UTC)', iso(l.approvedAt));
+    // order.approved_at: when the operator's approval was recorded in AegisPay. PayPal's own payer-approval time is not
+    // stored (the mandate PDF says so), so this must not be labelled as the buyer's approval.
+    p.field('Approved in AegisPay (UTC)', iso(l.approvedAt));
     p.field('Authorization', l.authorizationId ?? 'not recorded');
     p.field('Authorized at (UTC)', iso(l.authorizedAt));
     p.field('Capture', f.captureId);

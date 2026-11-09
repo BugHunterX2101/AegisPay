@@ -85,11 +85,18 @@ export interface ProcessPass {
  * event is marked processed in that same transaction, so two workers never take the same event and a crash leaves it
  * for the next pass. Handlers use the pool, not this transaction, so a PayPal call never holds a row lock of ours.
  * One bad event never stops the rest of the batch.
+ *
+ * No audit row is appended on `tx` while handlers are still running. appendAudit takes the chain-wide advisory lock and
+ * holds it until `tx` commits; the next event's handler appends its own audit rows on another pool connection, would wait
+ * on that lock, and this transaction would wait on the handler: a deadlock Postgres cannot see (one side waits in JS),
+ * which would stall every audit write in the system. Give-up rows are therefore written after the last handler returns,
+ * still in `tx`, so they commit atomically with the `processed_at` they explain.
  */
 export async function processPendingWebhooks(p: WebhookPipeline, opts: { limit?: number } = {}): Promise<ProcessPass> {
   const max = p.maxAttempts ?? WEBHOOK_MAX_ATTEMPTS;
   return withTx(async (tx) => {
     const pass: ProcessPass = { outcomes: [], retrying: 0, gaveUp: 0, deferred: 0 };
+    const gaveUp: Array<{ eventId: string; eventType: string; attempts: number; error: string }> = [];
     for (const ev of await claimVerifiedWebhooks(tx, opts.limit ?? 10)) {
       try {
         const outcome = await processWebhookEvent(p.ctx, ev);
@@ -104,17 +111,21 @@ export async function processPendingWebhooks(p: WebhookPipeline, opts: { limit?:
         const failure = await recordWebhookFailure(tx, ev.eventId, message, max);
         if (failure?.gaveUp) {
           pass.gaveUp++;
-          await appendAudit(tx, {
-            actor: 'system:webhook',
-            type: 'WEBHOOK_GAVE_UP',
-            entity: 'webhook_event',
-            entityId: ev.eventId,
-            payload: { eventType: ev.eventType, attempts: failure.attempts, error: message.slice(0, 500) },
-          });
+          gaveUp.push({ eventId: ev.eventId, eventType: ev.eventType, attempts: failure.attempts, error: message.slice(0, 500) });
         } else {
           pass.retrying++;
         }
       }
+    }
+    // Every handler has returned: taking the audit lock on `tx` now cannot block one of them.
+    for (const g of gaveUp) {
+      await appendAudit(tx, {
+        actor: 'system:webhook',
+        type: 'WEBHOOK_GAVE_UP',
+        entity: 'webhook_event',
+        entityId: g.eventId,
+        payload: { eventType: g.eventType, attempts: g.attempts, error: g.error },
+      });
     }
     return pass;
   }, p.ctx.db);

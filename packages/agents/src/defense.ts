@@ -50,7 +50,9 @@ export function buildFacts(i: DefenseInput): Fact[] {
       lines.push(`Delivery was recorded on ${day(i.deliveredAt)}${simulated ? ' by the seller\'s operator (a simulated carrier event, not a carrier report)' : ''}.`);
     }
   }
-  if (i.approvedBy && i.approvedAt) lines.push(`The purchase was approved by ${i.approvedBy} on ${day(i.approvedAt)} against a signed mandate with fingerprint ${i.mandateHash ?? 'not recorded'}.`);
+  // "fingerprinted", not "signed": the mandate's terms are hashed (SHA-256), and evidence sent to PayPal must not claim a
+  // cryptographic signature that does not exist.
+  if (i.approvedBy && i.approvedAt) lines.push(`The purchase was approved by ${i.approvedBy} on ${day(i.approvedAt)} against a recorded mandate whose terms have the SHA-256 fingerprint ${i.mandateHash ?? 'not recorded'}.`);
   if (i.snapshotSha256) lines.push(`The product listing as it appeared when the order was placed is stored with fingerprint ${i.snapshotSha256}${i.snapshotFetchedAt ? ` (captured ${day(i.snapshotFetchedAt)})` : ''}.`);
   if (i.refundIds.length) lines.push(`Refunds on record: ${i.refundIds.join(', ')}.`);
   return lines.map((text, n) => ({ key: `F${n + 1}`, text }));

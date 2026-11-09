@@ -168,7 +168,8 @@ export interface PayPalRefs {
 export async function findOrderIdByPayPalRef(db: Queryable, refs: PayPalRefs): Promise<string | null> {
   const lookups: Array<[string | null | undefined, string]> = [
     [refs.captureId, 'select id from purchase_order where capture_id = $1'],
-    [refs.authorizationId, 'select id from purchase_order where $1 = any(authorization_history) or authorization_id = $1'],
+    // `@>` (not `$1 = any(...)`) so the GIN index on authorization_history is usable; authorization_id has a btree (0008).
+    [refs.authorizationId, 'select id from purchase_order where authorization_history @> array[$1::text] or authorization_id = $1'],
     [refs.paypalOrderId, 'select id from purchase_order where paypal_order_id = $1'],
   ];
   for (const [ref, sql] of lookups) {

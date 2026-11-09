@@ -69,14 +69,17 @@ export async function getDispute(db: Queryable, id: string): Promise<DisputeRow 
 }
 
 /**
- * Disputes still in play: the order is DISPUTED (we owe an answer) or EVIDENCE_SUBMITTED (PayPal owes a verdict).
- * The worker re-fetches these so a lost webhook only delays an update.
+ * Disputes still in play: the order is DISPUTED (we owe an answer) or EVIDENCE_SUBMITTED (PayPal owes a verdict), and
+ * PayPal has not resolved the dispute. The worker re-fetches these so a lost webhook only delays an update.
+ * A RESOLVED dispute is left out: the sync that recorded RESOLVED applied any order transition in the same transaction,
+ * and one resolved before we answered keeps its order DISPUTED by design (DEVIATIONS D2), so re-reading it every two
+ * minutes forever would change nothing. A reopened dispute still arrives as a CUSTOMER.DISPUTE.UPDATED webhook.
  */
 export async function listOpenDisputeIds(db: Queryable, limit = 100): Promise<string[]> {
   const r = await db.query<{ paypal_dispute_id: string }>(
     `select d.paypal_dispute_id
        from dispute d join purchase_order o on o.id = d.order_id
-      where o.state in ('DISPUTED', 'EVIDENCE_SUBMITTED')
+      where o.state in ('DISPUTED', 'EVIDENCE_SUBMITTED') and d.status is distinct from 'RESOLVED'
       order by d.updated_at nulls first, d.paypal_dispute_id
       limit $1`,
     [limit],
@@ -169,7 +172,6 @@ export async function markBundleReviewed(tx: Queryable, id: string, reviewedBy: 
   return r.rowCount === 1;
 }
 
-/** Compare-and-set: a bundle is submitted at most once, so a retry cannot overwrite the first PayPal response. */
 /**
  * The crash window between "PayPal accepted the evidence" and "we committed that fact": paypalCall writes its
  * PAYPAL_CALL audit row in its own transaction, so a successful provide-evidence call leaves an `ok:true` row filed
@@ -190,6 +192,7 @@ export async function acceptedEvidenceCall(
   return row ? { seq: row.seq, paypalRequestId: row.paypal_request_id, paypalDebugId: row.paypal_debug_id } : null;
 }
 
+/** Compare-and-set: a bundle is submitted at most once, so a retry cannot overwrite the first PayPal response. */
 export async function markBundleSubmitted(tx: Queryable, id: string, paypalResponse: unknown): Promise<boolean> {
   const r = await tx.query(
     `update evidence_bundle set submitted_at = now(), paypal_response = $2::jsonb where id = $1 and submitted_at is null`,

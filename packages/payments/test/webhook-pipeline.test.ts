@@ -163,6 +163,26 @@ describe('processPendingWebhooks', () => {
     expect(await processPendingWebhooks(pipe)).toMatchObject({ outcomes: [], retrying: 0, gaveUp: 0 });
   });
 
+  it('gives up on one event and still finishes a later event in the same batch whose handler writes audit (no lock deadlock)', async () => {
+    // Event 1 fails at the attempt cap; event 2's handler appends an audit row (WEBHOOK_UNLINKED) on its own connection.
+    // If the give-up audit row took the chain lock on the batch transaction before event 2 ran, this pass would hang.
+    const failing = await receiveSigned('CUSTOMER.DISPUTE.CREATED', { dispute_id: 'PP-D-DEADLOCK' });
+    const later = await receiveSigned('PAYMENT.AUTHORIZATION.VOIDED', { id: `AUTH-UNKNOWN-${randomUUID()}` });
+    await verifyPendingWebhooks(pipe);
+    h.pp.failures.push({ match: /GET \/v1\/customer\/disputes\/PP-D-DEADLOCK/, count: 1000, status: 400 });
+
+    const before = await auditCountAll('WEBHOOK_GAVE_UP');
+    const pass = await Promise.race([
+      processPendingWebhooks({ ...pipe, maxAttempts: 1 }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('processPendingWebhooks deadlocked')), 15_000)),
+    ]);
+    expect(pass).toMatchObject({ gaveUp: 1, retrying: 0 });
+    expect(pass.outcomes.map((o) => [o.eventId, o.action])).toEqual([[later, 'UNLINKED']]);
+    expect(await auditCountAll('WEBHOOK_GAVE_UP')).toBe(before + 1);
+    expect((await row(failing)).processedAt).not.toBeNull();
+    expect(await verifyChain(h.t.db)).toMatchObject({ ok: true });
+  }, 30_000);
+
   it('keeps an event for later, without counting an attempt, while PayPal writes are switched off', async () => {
     const s = await seedGatedOrder(h.t);
     const { paypalOrderId } = await createHold(h.ctx, { orderRowId: s.orderId, decisionSha256: s.decisionSha, copy: { description: 'cables' }, appUrl: APP });

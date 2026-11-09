@@ -155,6 +155,17 @@ describe('session and CSRF', () => {
     expect(r.json()).toEqual({ ok: true });
   });
 
+  it('sends the baseline security headers on success and error responses alike', async () => {
+    for (const url of ['/healthz', '/api/orders', '/no-such-path']) {
+      const r = await app.inject({ method: 'GET', url });
+      expect(r.headers['x-content-type-options']).toBe('nosniff');
+      expect(r.headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+      expect(r.headers['x-frame-options']).toBe('DENY');
+      expect(r.headers['content-security-policy']).toBe("frame-ancestors 'none'");
+      expect(r.headers['cross-origin-opener-policy']).toBeUndefined(); // the PayPal popup needs window.opener
+    }
+  });
+
   it('sends a buyer returning from PayPal back to the app instead of a 404', async () => {
     const ok = await app.inject({ method: 'GET', url: '/approved?token=ABC&PayerID=XYZ' });
     expect(ok.statusCode).toBe(302);
@@ -442,6 +453,13 @@ describe('order flow', () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]!.payload).toMatchObject({ reason: 'SLA_BREACH', confirmedBy: v.actor });
+
+    // Who approved the hold and who confirmed the void are written as the visitor's identity, exactly once prefixed.
+    const actors = await h.t.db.query<{ type: string; actor: string }>(
+      `select type, actor from audit_event where entity_id = $1 and type in ('HOLD_AUTHORIZED', 'HOLD_VOIDED') order by seq`,
+      [o.orderId],
+    );
+    expect(actors.rows).toEqual([{ type: 'HOLD_AUTHORIZED', actor: v.actor }, { type: 'HOLD_VOIDED', actor: v.actor }]);
 
     const repeat = await v.post(`/api/orders/${o.orderId}/void`, { reason: 'SLA_BREACH', confirm: true });
     expect(repeat.statusCode).toBe(200);

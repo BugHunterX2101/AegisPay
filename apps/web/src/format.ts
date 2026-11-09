@@ -67,9 +67,14 @@ function subscribe(cb: () => void): () => void {
 
 const DAY_MS = 86_400_000;
 
+/** The real wall clock, ticking. PayPal's own timers (authorization expiry) run on this, whatever the demo clock says. */
+export function useWallNow(): number {
+  return useSyncExternalStore(subscribe, () => tick);
+}
+
 /** The app's own "now": the wall clock plus the Judge Mode time-travel offset, so a jump is visible in every timer. */
 export function useAppNow(): number {
-  const t = useSyncExternalStore(subscribe, () => tick);
+  const t = useWallNow();
   const offsetDays = useStore((s) => s.offsetDays);
   return t + offsetDays * DAY_MS;
 }

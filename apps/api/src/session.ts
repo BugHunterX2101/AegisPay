@@ -23,6 +23,13 @@ export interface SessionOptions {
   paypalEnv?: 'sandbox';
 }
 
+/**
+ * `user:<session id>` -> `<session id>`. `req.actor` already carries the `user:` prefix; the payments functions that take
+ * a person's name (approvedBy, confirmedBy, reviewedBy, submittedBy) add the prefix themselves when they write the audit
+ * row, so a route passes them this, never `req.actor`, or the audit log records `user:user:<sid>`.
+ */
+export const humanName = (actor: string): string => actor.replace(/^user:/, '');
+
 export const SESSION_COOKIE = 'aegis_sid';
 const SESSION_MAX_AGE_S = 12 * 3600;
 

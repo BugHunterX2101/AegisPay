@@ -62,12 +62,24 @@ None of these can be settled without a buyer-approved transaction and a buyer-fi
 ## 4. Real-sandbox findings (verified)
 
 - Token scopes include `disputes/create`, `disputes/read-seller`, `disputes/update-seller`, `payments/refund`.
-- An order with a card payment source on `AUTHORIZE` returns 422 `PAYEE_NOT_ENABLED_FOR_CARD_PROCESSING`. There is no auto-approve path, so capture, refund and dispute flows need a sandbox buyer to approve in a browser.
+- An order with a card payment source on `AUTHORIZE` returns 422 `PAYEE_NOT_ENABLED_FOR_CARD_PROCESSING` (re-checked 2026-11-08; the India-region merchant has no card-processing feature to turn on).
+- **Buyer approval without a buyer login (2026-11-08).** PayPal's own guest checkout ("Pay with Credit or Debit Card" on the `payer-action` page) approves an order for this merchant in headless Chromium, so `approved-hold.sandbox.test.ts` approves real holds without sandbox buyer credentials:
+  - Fill the form as a US buyer with a real street address. PayPal sometimes opens an address modal anyway: "We can't verify your address" (more often with a made-up address such as "1 Main St") or "We've found a match for your address" (a standardized suggestion, seen with the real "2211 N 1st St"). The order stays unapproved until "Continue" is pressed in either modal, and the test handles both.
+  - Card numbers:
+    - `4111 1111 1111 1111` passes the form, but `/authorize` answers 422 `INSTRUMENT_DECLINED`. The app's typed `INSTRUMENT_DECLINED` handling was seen working live on it.
+    - `5555 5555 5555 4444` and `4012 8888 8888 1881` are refused by the form ("We weren't able to add this card").
+    - Fresh Luhn-valid Visa numbers on the `403203` prefix authorize (`201`, authorization `CREATED`).
+- **Early reauthorization (2026-11-08).** A reauthorization inside the honor period returns 422 `REAUTHORIZATION_TOO_SOON`: "A reauthorization is only allowed once from Day 4 to Day 29 since the date of the original authorization." This matches `reauthDue` (3-day honor period, one reauthorization). The app surfaces it as `PAYPAL_ERROR` and records nothing, but the sweep never sends it, because `reauthDue` is false until the honor period ends.
+- **Approved-hold flows run live (2026-11-08)** in `approved-hold.sandbox.test.ts`:
+  - authorize: `HELD`, with the honor period and expiry taken from PayPal's own `create_time` / `expiration_time`, 29 days;
+  - two concurrent captures: one PayPal capture, and both callers get the same id with no `CAPTURE_BLOCKED`;
+  - void, then a repeat void: no change;
+  - the audit hash chain verifies afterwards.
 - `simulate-event` returns 202 with a `WH-` id, but the simulated event is **not** stored: `GET /v1/notifications/webhooks-events/{id}` returns 404 `INVALID_RESOURCE_ID`. A real public listener is needed to observe delivery.
 - The same `PayPal-Request-Id` replays the same order.
 - An unapproved order returns the issue `ORDER_NOT_APPROVED` on authorize.
 - Provide-evidence to an unknown dispute and refund of an unknown capture both return 404 `RESOURCE_NOT_FOUND`. This says nothing about the multipart format.
-- The sandbox account has no disputes (list is empty).
+- The Disputes API answers 200 with the "Customer disputes" add-on unticked. The list holds one dispute, PP-R-EVA-10196999 (see 5f), as of 2026-11-08.
 
 ## 5. Test coverage notes
 
@@ -148,7 +160,7 @@ Each claim was checked against the code, PayPal's own documents (`commands/docto
 |---|---|---|
 | Route dispute answers by HATEOAS links (INQUIRY vs CHARGEBACK) | **Built** | See 5f. Live dispute offers only `accept_claim` / `provide_supporting_info` |
 | Read-back after submitting evidence | **Built** (`EVIDENCE_READBACK`) | Records what PayPal lists; it never claims more than that |
-| `/paypal:doctor`: separate 422 `INSTRUMENT_DECLINED` | **Built** | `authorizeHold` maps it to `INSTRUMENT_DECLINED` (422), never retried, audited (`HOLD_INSTRUMENT_DECLINED`); the next authorize uses attempt n+1, so a new `PayPal-Request-Id` (the old one could replay the stored decline). Worker and webhook backstop treat it as "wait for the buyer". The dialog sends the buyer back to PayPal. Live: `declined.sandbox.test.ts` (sandbox `PayPal-Mock-Response` returns 422 with `details[].issue = INSTRUMENT_DECLINED`) |
+| `/paypal:doctor`: separate 422 `INSTRUMENT_DECLINED` | **Built** | `authorizeHold` maps it to `INSTRUMENT_DECLINED` (422), never retried, audited (`HOLD_INSTRUMENT_DECLINED`); the next authorize uses attempt n+1, so a new `PayPal-Request-Id` (the old one could replay the stored decline). Worker and webhook backstop treat it as "wait for the buyer". The dialog sends the buyer back to PayPal. Live: `declined.sandbox.test.ts` (sandbox `PayPal-Mock-Response` returns 422 with `details[].issue = INSTRUMENT_DECLINED`; it skips unless `PAYPAL_WRITES_ENABLED=true`, which `.env` leaves off, so run it with `PAYPAL_WRITES_ENABLED=true pnpm vitest run -c vitest.sandbox.config.ts packages/payments/test/declined.sandbox.test.ts`. Passed live 2026-11-08) |
 | `/paypal:doctor`: `findEligibleMethods()` before rendering | **Built** | `PayPalApprove.tsx` |
 | `/paypal:doctor`: `PAYPAL_ENVIRONMENT` switch | **Built** | `loadPayPalConfig` derives the base URL from it; only `sandbox` (or unset) loads, `live` stops the process. The browser's SDK environment and checkout host come from the session |
 | Checkout brand, locale, shipping preference | **Built** | `brand_name: "AegisPay"` (the product is not an MCP server, so not "AegisPay MCP"), `locale: en-US`, `shipping_preference: GET_FROM_FILE`. Accepted live (HTTP 200) |
@@ -168,6 +180,19 @@ Each claim was checked against the code, PayPal's own documents (`commands/docto
 | Inline quantity editing in the grid | Rejected | A quantity is part of the gated decision (its hash is attested). Editing it in the grid would bypass the gatekeeper |
 | Shared demo state (one judge's reset clears another's data) | Known limit | `POST /api/demo/reset` and the demo clock are global (5b). The audit chain survives a reset. Nothing automated resets the hosted demo (the nightly workflow is read-only); `pnpm seed` and the Judge Mode reset button do, and one of them cleared the 2026-11-07 run's rows |
 
+## 5i. Correctness pass (2026-11-08): decisions that differ from the TDD
+
+| Topic | TDD says | What the code does, and why |
+|---|---|---|
+| When to reauthorize | `now > honor_ends_at − 2 h` (TDD, Authorizations) | `now ≥ honor_ends_at + 10 min` and `now < auth_expires_at` (`reauthDue`, `REAUTH_AFTER_HONOR_MS`). PayPal accepts a reauthorization only on days 4 to 29 of an authorization, i.e. **after** the 3-day honor period ([reauthorize API](https://docs.paypal.ai/reference/api/rest/authorizations/reauthorize-authorized-payment), [authorization guide](https://developer.paypal.com/docs/checkout/standard/customize/authorization/)). Two hours before the end of honor, PayPal would reject it. The 10 minutes absorb clock skew between us and PayPal |
+| Which clock decides reauthorization | Not stated | PayPal's real clock (`ctx.clock`), never the Judge Mode demo clock. Time travel moves SLAs and the breach sweep; it must not send a reauthorize call that PayPal will reject. The web tooltip for authorization expiry also counts on the wall clock (`useWallNow`) |
+| How many times to reauthorize | Not stated | At most once. PayPal allows one reauthorization, on days 4 to 29, and the new authorization starts its own 3-day honor period. Without a cap, the sweep would ask again three days later and PayPal would refuse it on every pass until expiry. `reauthDue` returns false once `authorization_history` holds more than one id. `reauthorize` itself refuses a second one with `BAD_STATE` and does not call PayPal |
+| Reauthorizing a hold already past its SLA | "SLA still open" | The sweep skips holds that `listSlaBreaches` reports. The SLA watch flags them (`SLA_BREACH_FLAGGED`) for a person to confirm a void (FR-07), so a reauthorization would only extend a hold that is about to be released |
+| Polling resolved disputes | Not stated | `listOpenDisputeIds` skips disputes PayPal marked `RESOLVED`. The sync that recorded `RESOLVED` already applied any order transition, and a dispute resolved before evidence keeps its order `DISPUTED` by design (D2), so re-reading it every two minutes changed nothing. A reopened dispute still arrives by webhook |
+| Concurrent captures of one order | One guarded transition | `capture` now runs under a session advisory lock per order (`capture:<orderRowId>`), so two capture clicks cannot both pass the proof gate and race to PayPal. No transaction is held across the PayPal call |
+| Response headers | Not stated | Every response that goes through Fastify, including the page and its assets, carries `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY` and `Content-Security-Policy: frame-ancestors 'none'`. The SSE stream (`/api/stream`) hijacks the reply and writes to the raw socket, so it skips the `onSend` hook. That is harmless: it serves no HTML. No `Cross-Origin-Opener-Policy`: the PayPal checkout popup needs `window.opener`. A full script CSP was not added; the PayPal SDK loads scripts and frames from several PayPal hosts that would have to be verified live first |
+| `trustProxy: true` | Not stated | Kept. Render terminates TLS in front of the app, and the rate limiter keys on the client address it forwards. Narrowing it to a hop count needs Render's proxy depth confirmed on the live deploy |
+
 ## 6. What is needed from the owner
 
 1. ~~A sandbox **buyer** login (or approve one order manually)~~ Done on 2026-11-07: order `1DD80013YX7168537` was buyer-approved, authorized (`9RT36463D57941302`) and captured (`6GK74474NS2133130`). IDs confirmed by GET at PayPal on 2026-11-08 ([SANDBOX_VERIFICATION.md](SANDBOX_VERIFICATION.md)).
@@ -176,3 +201,4 @@ Each claim was checked against the code, PayPal's own documents (`commands/docto
 4. ~~The Channel3 API key and an LLM key~~ Provided and verified live (`pnpm test:sandbox`). Without them the agent routes answer `AGENT_UNAVAILABLE` rather than inventing results. Please confirm the second pasted string was the Channel3 key.
 5. **Rotate or revoke** the GitHub token, the PayPal sandbox secret and the Groq key that were pasted in chat, after the hackathon.
 6. To prove `provide-supporting-info` live: a new buyer-approved order on the hosted demo, then a buyer-filed dispute on it from the sandbox buyer account (PayPal's sandbox dispute dashboard). Do not run `pnpm seed` or press "Reset demo" on the hosted demo until it has been submitted.
+7. ~~A sandbox **buyer** login for the 2026-11-08 correctness fixes~~ Not needed. They ran live on 2026-11-08 through PayPal's own guest checkout, with no buyer login: the concurrent capture lock, void, and PayPal's answer to an early reauthorization (see section 4). Run them with `SANDBOX_WRITES=1 pnpm test:sandbox`. `approved-hold.sandbox.test.ts` uses `PAYPAL_SANDBOX_BUYER_EMAIL` / `PAYPAL_SANDBOX_BUYER_PASSWORD` when they are in `.env`, and guest checkout otherwise. A buyer account is still needed for item 6, because only a buyer can file a dispute.

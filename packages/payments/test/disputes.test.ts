@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DomainError } from '@aegis/core';
-import { getDispute, getEvidenceBundle, getOrder, latestEvidenceBundle, transition, verifyChain, withTx } from '@aegis/db';
+import { getDispute, getEvidenceBundle, getOrder, latestEvidenceBundle, listOpenDisputeIds, transition, verifyChain, withTx } from '@aegis/db';
 import type { EvidenceBundleRow } from '@aegis/db';
 import { capture } from '../src/authorizations.ts';
 import {
@@ -223,11 +223,14 @@ describe('syncing a dispute into our books', () => {
 
   it('a dispute resolved before we answered stays DISPUTED, with an audit row for a human (no edge to RESOLVED_*)', async () => {
     const x = await disputed();
+    expect(await listOpenDisputeIds(h.t.db)).toContain(x.disputeId); // still open: polled
     h.pp.resolveDispute(x.disputeId, 'RESOLVED_BUYER_FAVOUR');
     const r = await syncDispute(h.ctx, x.disputeId);
     expect(r).toMatchObject({ orderState: 'DISPUTED', moved: null });
     expect(await state(x.orderId)).toBe('DISPUTED');
     expect(await auditTypes(x.disputeId)).toContain('DISPUTE_RESOLVED_WITHOUT_EVIDENCE');
+    // PayPal's verdict is final and already recorded: the two-minute poller stops re-reading it (it would change nothing).
+    expect(await listOpenDisputeIds(h.t.db)).not.toContain(x.disputeId);
   });
 
   it('keeps the audit chain valid', async () => {

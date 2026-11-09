@@ -56,6 +56,17 @@ export async function buildApp(o: BuildAppOptions): Promise<FastifyInstance> {
   app.setReplySerializer((payload) => toJson(payload)); // bigint -> decimal string, everywhere
   installErrorHandling(app);
 
+  // Baseline response headers on everything (pages, assets, JSON, errors). Added before any route or plugin so every
+  // route inherits it. No Cross-Origin-Opener-Policy: the PayPal checkout popup needs window.opener. Framing is denied
+  // outright; the PayPal buttons are PayPal's frames inside our page, which these headers do not touch, and evidence
+  // PDFs open in their own tab.
+  app.addHook('onSend', async (_req, reply) => {
+    void reply.header('x-content-type-options', 'nosniff');
+    void reply.header('referrer-policy', 'strict-origin-when-cross-origin');
+    void reply.header('x-frame-options', 'DENY');
+    void reply.header('content-security-policy', "frame-ancestors 'none'");
+  });
+
   // The web app is same-origin static files. It is registered BEFORE the rate limiter on purpose: the limiter only wraps
   // routes added after it, so loading the page never spends a visitor's /api budget. Unknown paths still reach the
   // JSON 404 above (the app is a single page, so there are no client-side routes to fall back for).

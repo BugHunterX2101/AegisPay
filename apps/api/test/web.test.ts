@@ -62,6 +62,15 @@ describe('static web app', () => {
     expect(r.body).toContain('<div id="root">');
   });
 
+  it('sends the anti-framing and nosniff headers on the page itself, where framing actually matters', async () => {
+    const r = await web.inject({ method: 'GET', url: '/' });
+    expect(r.headers['x-frame-options']).toBe('DENY');
+    expect(r.headers['content-security-policy']).toBe("frame-ancestors 'none'");
+    expect(r.headers['x-content-type-options']).toBe('nosniff');
+    expect(r.headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+    expect(r.headers['cross-origin-opener-policy']).toBeUndefined(); // the PayPal popup needs window.opener
+  });
+
   it('serves fingerprinted assets as immutable', async () => {
     const r = await web.inject({ method: 'GET', url: '/assets/index-abc123.js' });
     expect(r.statusCode).toBe(200);

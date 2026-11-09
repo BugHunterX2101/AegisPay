@@ -193,13 +193,19 @@ export async function runSlaWatch(d: WorkerDeps): Promise<string[]> {
   return flagged;
 }
 
-/** Reauthorize holds whose honor period is about to end while the SLA is still open (P1). One order failing never stops the rest. */
+/**
+ * Reauthorize holds whose honor period has ended while the delivery SLA is still open (P1). One order failing never stops
+ * the rest. Two clocks, on purpose: the honor period and expiry are PayPal's instants, so they are compared with the real
+ * clock (the PayPal context's), never Judge Mode's offset; the SLA is the app's own deadline, so it follows the app
+ * clock. A breached hold is left alone: it waits for a human to void it, and extending it would only prolong the hold.
+ */
 export async function runReauthSweep(d: WorkerDeps): Promise<{ reauthorized: string[]; errors: Array<{ orderId: string; error: string }> }> {
   const ctx = ctxOf(d);
   const out = { reauthorized: [] as string[], errors: [] as Array<{ orderId: string; error: string }> };
-  const now = d.clock.now();
+  const paypalNow = ctx.clock.now();
+  const breached = new Set((await listSlaBreaches(ctx.db, today(d.clock))).map((b) => b.order.id));
   for (const o of await listOrdersInStates(ctx.db, ['HELD', 'IN_TRANSIT'])) {
-    if (!reauthDue(o, now)) continue;
+    if (breached.has(o.id) || !reauthDue(o, paypalNow)) continue;
     try {
       await reauthorize(ctx, o.id, o.authorizationHistory.length + 1);
       out.reauthorized.push(o.id);
@@ -244,7 +250,8 @@ export async function runPollOpen(d: WorkerDeps): Promise<PollResult> {
   const fail = (ref: string, err: unknown) => out.errors.push({ ref, error: msg(err) });
 
   for (const o of await listOrdersInStates(ctx.db, ['AWAITING_APPROVAL'])) {
-    if (!o.paypalOrderId || d.clock.now().getTime() - o.updatedAt.getTime() < APPROVAL_GRACE_MS) continue;
+    // updated_at is a real database timestamp, so the grace is measured on the real clock, not Judge Mode's offset one.
+    if (!o.paypalOrderId || ctx.clock.now().getTime() - o.updatedAt.getTime() < APPROVAL_GRACE_MS) continue;
     // After a decline PayPal may still call the order APPROVED. Authorizing again from here would retry the declined
     // instrument on every tick, so a declined order waits for the buyer's next approval in the app instead.
     if ((await countAuditOfType(ctx.db, o.id, INSTRUMENT_DECLINED_AUDIT)) > 0) continue;

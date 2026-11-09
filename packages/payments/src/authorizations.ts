@@ -1,13 +1,18 @@
 import { PaymentsController } from '@paypal/paypal-server-sdk';
 import type { CapturedPayment, PaymentAuthorization } from '@paypal/paypal-server-sdk';
 import { DomainError, usd } from '@aegis/core';
-import { appendAudit, getFulfillment, getOrderBundle, recordReauthorization, transition, withTx } from '@aegis/db';
+import { appendAudit, getFulfillment, getOrderBundle, recordReauthorization, transition, withAdvisoryLock, withTx } from '@aegis/db';
 import { hasIssue, paypalCall } from './call.ts';
 import type { PayPalContext } from './client.ts';
-import { holdAmounts } from './orders.ts';
+import { HONOR_PERIOD_MS, holdAmounts } from './orders.ts';
 
-/** Reauthorize when less than this remains of the honor period (TDD "Void and reauthorize"). */
-export const REAUTH_LEAD_MS = 2 * 3_600_000;
+/**
+ * PayPal accepts a reauthorization only AFTER the 3-day honor period has ended (days 4 to 29 of the authorization:
+ * Payments v2 "Reauthorize authorized payment"). The TDD's "honor_ends_at - 2 h" would ask inside the honor period, so
+ * every scheduled reauthorization would be refused (recorded in docs/DEVIATIONS.md). This is the margin waited past
+ * `honor_ends_at` (which we derive from PayPal's create_time) so a few minutes of clock skew cannot make the call early.
+ */
+export const REAUTH_AFTER_HONOR_MS = 10 * 60_000;
 
 const payments = (ctx: PayPalContext) => new PaymentsController(ctx.sdk());
 
@@ -41,8 +46,17 @@ export async function getAuthorization(ctx: PayPalContext, orderRowId: string, a
  *  4. PayPal's CURRENT authorization (fresh GET) is CREATED/PENDING, unexpired, and for exactly that amount.
  * Any failed condition is written to the audit log and nothing is sent to PayPal.
  * Capture is always `final_capture: true` for the authorized amount, so the hold cannot be partially drained.
+ *
+ * Captures of one order are serialised by a per-order advisory lock (as refunds are). Without it, a second concurrent
+ * call can read PayPal's authorization after the first capture landed there but before it committed SETTLED, and fail
+ * with ALREADY_CAPTURED for a capture that is ours. With it, the second call waits, sees SETTLED, and returns the same
+ * capture. The worker's per-order queue already prevents overlap; this makes the function safe on its own.
  */
 export async function capture(ctx: PayPalContext, orderRowId: string): Promise<{ captureId: string; status: string; reused: boolean }> {
+  return withAdvisoryLock(`capture:${orderRowId}`, () => captureLocked(ctx, orderRowId), ctx.db);
+}
+
+async function captureLocked(ctx: PayPalContext, orderRowId: string): Promise<{ captureId: string; status: string; reused: boolean }> {
   const bundle = await getOrderBundle(ctx.db, orderRowId);
   if (!bundle) throw new DomainError('NOT_FOUND', `Order ${orderRowId} not found`);
   const { order, mandate } = bundle;
@@ -269,12 +283,20 @@ export async function voidHold(ctx: PayPalContext, orderRowId: string, input: Vo
 }
 
 /**
- * Whether a reauthorization is due: SLA still open, hold still held, and less than REAUTH_LEAD_MS of the honor
- * period left. Never past `auth_expires_at`.
+ * Whether PayPal would accept a reauthorization now: the hold is still held, the current authorization's honor period
+ * ended at least REAUTH_AFTER_HONOR_MS ago, and the authorization has not expired. `now` must be PayPal time (the real
+ * clock, never Judge Mode's offset clock): both instants compared against it come from PayPal. Whether the delivery SLA
+ * is still open is the caller's check (the sweep skips breached orders, which wait for a human void).
+ * PayPal allows ONE reauthorization (days 4 to 29); the new authorization gets its own 3-day honor period, so without
+ * the history check the sweep would ask again 3 days later and be refused on every pass until expiry.
  */
-export function reauthDue(o: { state: string; honorEndsAt: Date | null; authExpiresAt: Date | null }, now: Date): boolean {
+export function reauthDue(
+  o: { state: string; honorEndsAt: Date | null; authExpiresAt: Date | null; authorizationHistory?: readonly string[] },
+  now: Date,
+): boolean {
   if ((o.state !== 'HELD' && o.state !== 'IN_TRANSIT') || !o.honorEndsAt || !o.authExpiresAt) return false;
-  return now.getTime() > o.honorEndsAt.getTime() - REAUTH_LEAD_MS && now < o.authExpiresAt;
+  if ((o.authorizationHistory?.length ?? 1) > 1) return false;
+  return now.getTime() >= o.honorEndsAt.getTime() + REAUTH_AFTER_HONOR_MS && now < o.authExpiresAt;
 }
 
 /**
@@ -296,6 +318,9 @@ export async function reauthorize(ctx: PayPalContext, orderRowId: string, attemp
     // This attempt already ran (a retry after a lost response): the stored id is the reauthorized one.
     return { authorizationId: order.authorizationId };
   }
+  if (order.authorizationHistory.length > 1) {
+    throw new DomainError('BAD_STATE', 'PayPal allows only one reauthorization per authorization; this hold was already reauthorized');
+  }
 
   const res = await paypalCall<PaymentAuthorization>({
     db: ctx.db,
@@ -316,7 +341,7 @@ export async function reauthorize(ctx: PayPalContext, orderRowId: string, attemp
   const next = {
     authorizationId: a.id,
     authCreatedAt: createdAt,
-    honorEndsAt: new Date(createdAt.getTime() + 3 * 24 * 3_600_000),
+    honorEndsAt: new Date(createdAt.getTime() + HONOR_PERIOD_MS),
     authExpiresAt: new Date(a.expirationTime),
   };
   await withTx(async (tx) => {

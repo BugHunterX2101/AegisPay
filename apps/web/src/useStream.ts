@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
-import { api } from './api.ts';
+import { api, getSession } from './api.ts';
 import { useStore } from './store.ts';
 import type { Dispute, FeedItem, OrderRow, SelfCheck } from './types.ts';
 
 const FEED_EVENTS = ['agent.step', 'gate.decision', 'webhook.verified', 'mandate.draft'] as const;
+const MAX_RETRY_MS = 30_000;
 
 /** Load (or reload) the grid's source data. Used on first paint and whenever the stream says it fell too far behind. */
 export async function loadAll(): Promise<void> {
@@ -16,31 +17,76 @@ export async function loadAll(): Promise<void> {
   s.setDisputes(d.disputes);
 }
 
+const parse = <T,>(e: Event): T => JSON.parse((e as MessageEvent).data as string) as T;
+
+/** A reload the stream triggers on its own has no button to report a failure on; the next event or retry repairs it. */
+const reload = () => void loadAll().catch(() => undefined);
+
+function wire(es: EventSource): void {
+  es.addEventListener('order.upsert', (e) => useStore.getState().upsertOrder(parse<OrderRow>(e)));
+  es.addEventListener('dispute.upsert', (e) => useStore.getState().upsertDispute(parse<Dispute>(e)));
+  es.addEventListener('selfcheck.result', (e) => useStore.getState().setSelfcheck(parse<SelfCheck>(e)));
+  es.addEventListener('resync', reload);
+  for (const kind of FEED_EVENTS) {
+    es.addEventListener(kind, (e) => {
+      const data = parse<Record<string, unknown>>(e);
+      const at = typeof data.at === 'string' ? data.at : new Date().toISOString();
+      const item: FeedItem = { key: `${kind}:${(e as MessageEvent).lastEventId || at}`, kind, at, data };
+      useStore.getState().pushFeed(item);
+    });
+  }
+}
+
 /**
  * One EventSource for the whole page. The server tags each message with the audit sequence number, so after a dropped
  * connection the browser reconnects with Last-Event-ID and the server replays what was missed; `resync` means it could
  * not, and the grid is reloaded in full.
+ *
+ * The browser only retries on its own while the connection is merely dropped. If the server answers with an error
+ * status (a 401 after a server restart invalidated the cookie, a 502 while a deploy swaps instances), the EventSource
+ * is CLOSED for good. Then the session is refreshed and a new EventSource is opened after a growing delay (1 s, 2 s,
+ * 4 s … capped at 30 s). A new EventSource starts without Last-Event-ID, so the grid is reloaded once it is open again.
  */
 export function useStream(): void {
   useEffect(() => {
-    const es = new EventSource('/api/stream');
-    const st = useStore.getState();
-    es.onopen = () => st.setStream('live');
-    es.onerror = () => st.setStream(es.readyState === EventSource.CLOSED ? 'connecting' : 'reconnecting');
+    let es: EventSource | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+    let failures = 0;
 
-    const parse = <T,>(e: Event): T => JSON.parse((e as MessageEvent).data as string) as T;
-    es.addEventListener('order.upsert', (e) => useStore.getState().upsertOrder(parse<OrderRow>(e)));
-    es.addEventListener('dispute.upsert', (e) => useStore.getState().upsertDispute(parse<Dispute>(e)));
-    es.addEventListener('selfcheck.result', (e) => useStore.getState().setSelfcheck(parse<SelfCheck>(e)));
-    es.addEventListener('resync', () => void loadAll());
-    for (const kind of FEED_EVENTS) {
-      es.addEventListener(kind, (e) => {
-        const data = parse<Record<string, unknown>>(e);
-        const at = typeof data.at === 'string' ? data.at : new Date().toISOString();
-        const item: FeedItem = { key: `${kind}:${(e as MessageEvent).lastEventId || at}`, kind, at, data };
-        useStore.getState().pushFeed(item);
-      });
-    }
-    return () => es.close();
+    const open = (afterClose: boolean) => {
+      if (stopped) return;
+      const src = new EventSource('/api/stream');
+      es = src;
+      src.onopen = () => {
+        failures = 0;
+        useStore.getState().setStream('live');
+        if (afterClose) reload();
+      };
+      src.onerror = () => {
+        if (src.readyState !== EventSource.CLOSED) {
+          useStore.getState().setStream('reconnecting');
+          return;
+        }
+        src.close();
+        useStore.getState().setStream('connecting');
+        const delay = Math.min(MAX_RETRY_MS, 1_000 * 2 ** failures);
+        failures += 1;
+        timer = setTimeout(() => {
+          // Still down: the session call fails, the next EventSource fails too, and that schedules the next try.
+          void getSession(true)
+            .catch(() => undefined)
+            .then(() => open(true));
+        }, delay);
+      };
+      wire(src);
+    };
+
+    open(false);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      es?.close();
+    };
   }, []);
 }

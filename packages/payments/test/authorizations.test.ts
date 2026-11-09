@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DomainError } from '@aegis/core';
 import { getOrder, transition, verifyChain, withTx } from '@aegis/db';
-import { REAUTH_LEAD_MS, capture, reauthDue, reauthorize, voidHold } from '../src/authorizations.ts';
+import { REAUTH_AFTER_HONOR_MS, capture, reauthDue, reauthorize, voidHold } from '../src/authorizations.ts';
 import { authorizeHold, createHold, pushTracking } from '../src/orders.ts';
 import { paypalRequestId } from '../src/request-id.ts';
 import { seedFulfillment, seedGatedOrder, startHarness } from './harness.ts';
@@ -348,23 +348,32 @@ describe('voidHold', () => {
 
 describe('reauthDue', () => {
   const now = new Date('2036-01-10T12:00:00Z');
-  const honor = (ms: number) => new Date(now.getTime() + ms);
-  const base = { state: 'HELD', honorEndsAt: honor(REAUTH_LEAD_MS - 1000), authExpiresAt: honor(10 * 86_400_000) };
+  const at = (ms: number) => new Date(now.getTime() + ms);
+  // The honor period ended a little more than the safety margin ago: PayPal accepts a reauthorization now.
+  const base = { state: 'HELD', honorEndsAt: at(-REAUTH_AFTER_HONOR_MS - 1000), authExpiresAt: at(10 * 86_400_000) };
 
-  it('is due once less than the lead time of the honor period remains', () => {
+  it('is due once the honor period has ended (plus the skew margin), which is when PayPal accepts it', () => {
     expect(reauthDue(base, now)).toBe(true);
     expect(reauthDue({ ...base, state: 'IN_TRANSIT' }, now)).toBe(true);
   });
-  it('is not due while more than the lead time remains', () => {
-    expect(reauthDue({ ...base, honorEndsAt: honor(REAUTH_LEAD_MS + 1000) }, now)).toBe(false);
+  it('is never due inside the honor period, where PayPal refuses a reauthorization', () => {
+    expect(reauthDue({ ...base, honorEndsAt: at(2 * 3_600_000) }, now)).toBe(false); // the old "2 h before the end" window
+    expect(reauthDue({ ...base, honorEndsAt: at(1000) }, now)).toBe(false);
+  });
+  it('waits out the skew margin just after the honor period ends', () => {
+    expect(reauthDue({ ...base, honorEndsAt: at(-REAUTH_AFTER_HONOR_MS + 1000) }, now)).toBe(false);
   });
   it('is never due past the authorization expiry', () => {
-    expect(reauthDue({ ...base, authExpiresAt: honor(-1) }, now)).toBe(false);
+    expect(reauthDue({ ...base, authExpiresAt: at(-1) }, now)).toBe(false);
   });
   it('is not due outside HELD/IN_TRANSIT or without hold facts', () => {
     for (const state of ['AWAITING_APPROVAL', 'DELIVERED', 'SETTLED', 'VOIDED']) expect(reauthDue({ ...base, state }, now)).toBe(false);
     expect(reauthDue({ ...base, honorEndsAt: null }, now)).toBe(false);
     expect(reauthDue({ ...base, authExpiresAt: null }, now)).toBe(false);
+  });
+  it('is never due once the hold has been reauthorized (PayPal allows one reauthorization)', () => {
+    expect(reauthDue({ ...base, authorizationHistory: ['AUTH-1'] }, now)).toBe(true);
+    expect(reauthDue({ ...base, authorizationHistory: ['AUTH-1', 'AUTH-2'] }, now)).toBe(false);
   });
 });
 
@@ -392,6 +401,14 @@ describe('reauthorize', () => {
     h.pp.seen.length = 0;
     const b = await reauthorize(h.ctx, s.orderId, 2);
     expect(b).toEqual(a);
+    expect(h.pp.seen).toHaveLength(0);
+  });
+
+  it('refuses a second reauthorization (PayPal allows one) without calling PayPal', async () => {
+    const s = await held();
+    await reauthorize(h.ctx, s.orderId, 2);
+    h.pp.seen.length = 0;
+    expect(await code(reauthorize(h.ctx, s.orderId, 3))).toBe('BAD_STATE');
     expect(h.pp.seen).toHaveLength(0);
   });
 
