@@ -1,7 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
-import { ModuleRegistry, colorSchemeVariable, themeQuartz } from 'ag-grid-community';
+import {
+  CellStyleModule,
+  ClientSideRowModelModule,
+  CsvExportModule,
+  HighlightChangesModule,
+  ModuleRegistry,
+  PinnedRowModule,
+  RowAutoHeightModule,
+  ValidationModule,
+  colorSchemeVariable,
+  themeQuartz,
+} from 'ag-grid-community';
 import type { ColDef, GetRowIdParams, ProcessCellForExportParams } from 'ag-grid-community';
-import { AllEnterpriseModule, LicenseManager } from 'ag-grid-enterprise';
+import { LicenseManager, MasterDetailModule } from 'ag-grid-enterprise';
 import { AgGridReact } from 'ag-grid-react';
 import type { CustomCellRendererProps, CustomDetailCellRendererProps } from 'ag-grid-react';
 import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -15,7 +26,19 @@ import { StateChip } from './StateChip.tsx';
 // AG Grid Enterprise runs without a key (it shows a watermark); a key can be baked in at build time.
 const licenseKey = import.meta.env.VITE_AG_GRID_LICENSE_KEY as string | undefined;
 if (licenseKey) LicenseManager.setLicenseKey(licenseKey);
-ModuleRegistry.registerModules([AllEnterpriseModule]);
+// Only the features this grid uses. AllEnterpriseModule would ship charts, pivoting, Excel, formulas and side bars that
+// nothing here renders (about 2 MB of the chunk). ValidationModule, in development only, names any module a grid option
+// needs but is missing, so a feature added later fails loudly instead of silently doing nothing.
+ModuleRegistry.registerModules([
+  ClientSideRowModelModule, // rowData
+  CellStyleModule, // the rightAligned column type is applied as a cellClass
+  MasterDetailModule, // masterDetail + the audit-trail detail row + agGroupCellRenderer
+  PinnedRowModule, // pinnedBottomRowData: the ledger foot row
+  RowAutoHeightModule, // autoHeight on the wrapping Order column, detailRowAutoHeight
+  CsvExportModule, // Export CSV
+  HighlightChangesModule, // enableCellChangeFlash when the stream changes a cell
+  ...(import.meta.env.DEV ? [ValidationModule] : []),
+]);
 
 // The grid wears the page's tokens; the CSS variables switch with the theme, so one param set serves both modes.
 const theme = themeQuartz.withPart(colorSchemeVariable).withParams({
@@ -69,9 +92,12 @@ function ActionsCell(p: CustomCellRendererProps<OrderRow>) {
   const post = async (path: string, ok: string) => {
     setBusy(true);
     try {
-      await api('POST', `/api/orders/${o.id}/${path}`, {});
+      // The route answers with the updated grid row: apply it directly instead of reloading every order and dispute
+      // (two more round trips before the button came back). The stream's copy of the same change is then a no-op.
+      const r = await api<{ order?: OrderRow | null }>('POST', `/api/orders/${o.id}/${path}`, {});
+      if (r.order) useStore.getState().upsertOrder(r.order);
+      else await loadAll();
       toast('ok', ok);
-      await loadAll();
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {
@@ -172,7 +198,15 @@ function AuditDetail(p: CustomDetailCellRendererProps<OrderRow>) {
 // A stable component: an inline arrow here would be a new component type on every render, remounting the overlay.
 const NoOrders = () => <span className="muted">No orders yet. Describe what you need above.</span>;
 
-export function CommandGrid(ctx: GridCtx) {
+// Grid options defined once. AgGridReact compares props by reference, and a new defaultColDef object counts as new
+// column definitions: the grid rebuilt every column on each render, i.e. on every order the stream delivered.
+const DEFAULT_COL_DEF: ColDef<OrderRow> = { resizable: true, sortable: true, enableCellChangeFlash: true, suppressHeaderMenuButton: true };
+const getRowId = (p: GetRowIdParams<OrderRow>) => p.data.id;
+const isRowMaster = (d: OrderRow | undefined) => !!d && d.id !== TOTAL_ROW_ID;
+
+export function CommandGrid({ approve, ship, voidHold, cancel, evidence }: GridCtx) {
+  // The parent passes stable setters, so the context object only changes if one of them does.
+  const ctx = useMemo<GridCtx>(() => ({ approve, ship, voidHold, cancel, evidence }), [approve, ship, voidHold, cancel, evidence]);
   const ordersMap = useStore((s) => s.orders);
   const rows = useMemo(
     () => Object.values(ordersMap).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
@@ -251,11 +285,11 @@ export function CommandGrid(ctx: GridCtx) {
           rowData={rows}
           pinnedBottomRowData={totalRow}
           columnDefs={columnDefs}
-          defaultColDef={{ resizable: true, sortable: true, enableCellChangeFlash: true, suppressHeaderMenuButton: true }}
-          getRowId={(p: GetRowIdParams<OrderRow>) => p.data.id}
+          defaultColDef={DEFAULT_COL_DEF}
+          getRowId={getRowId}
           context={ctx}
           masterDetail
-          isRowMaster={(d: OrderRow | undefined) => !!d && d.id !== TOTAL_ROW_ID}
+          isRowMaster={isRowMaster}
           detailCellRenderer={AuditDetail}
           detailRowAutoHeight
           noRowsOverlayComponent={NoOrders}

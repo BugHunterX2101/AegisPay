@@ -1,5 +1,5 @@
 import { X } from '@phosphor-icons/react';
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { formatClock } from '../format.ts';
 import { useStore } from '../store.ts';
 import type { FeedItem } from '../types.ts';
@@ -18,6 +18,27 @@ function headline(f: FeedItem): string {
   const name = d.step ?? d.name ?? d.tool ?? d.kind;
   return name ? String(name) : String(d.runId ?? '').slice(0, 8);
 }
+
+/**
+ * One feed line. Feed items never change once written, so a memoised entry renders once, not on every new event; and the
+ * pretty-printed payload is only built when its <details> is opened (up to 200 JSON.stringify calls per event before).
+ */
+const FeedEntry = memo(function FeedEntry({ f }: { f: FeedItem }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li data-kind={f.kind}>
+      <div className="feed-head">
+        <span className={`kind kind-${f.kind.split('.')[0]}`}>{LABEL[f.kind]}</span>
+        <time dateTime={new Date(f.at).toISOString()}>{formatClock(f.at)}</time>
+      </div>
+      <div>{headline(f)}</div>
+      <details onToggle={(e) => setOpen(e.currentTarget.open)}>
+        <summary>Details</summary>
+        {open && <pre>{JSON.stringify(f.data, null, 2)}</pre>}
+      </details>
+    </li>
+  );
+});
 
 /** The agent's work and the gatekeeper's verdicts, as they are written to the audit log. */
 export function AgentDrawer() {
@@ -53,19 +74,7 @@ export function AgentDrawer() {
       </header>
       {feed.length === 0 && <p className="muted">Nothing yet. Draft a mandate and the agent&apos;s steps appear here live.</p>}
       <ul>
-        {feed.map((f) => (
-          <li key={f.key} data-kind={f.kind}>
-            <div className="feed-head">
-              <span className={`kind kind-${f.kind.split('.')[0]}`}>{LABEL[f.kind]}</span>
-              <time dateTime={new Date(f.at).toISOString()}>{formatClock(f.at)}</time>
-            </div>
-            <div>{headline(f)}</div>
-            <details>
-              <summary>Details</summary>
-              <pre>{JSON.stringify(f.data, null, 2)}</pre>
-            </details>
-          </li>
-        ))}
+        {feed.map((f) => <FeedEntry key={f.key} f={f} />)}
       </ul>
     </aside>
   );

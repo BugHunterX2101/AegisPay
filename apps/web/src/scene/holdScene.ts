@@ -168,6 +168,24 @@ export function createHoldScene(canvas: HTMLCanvasElement, opts: { reduced: bool
 
   const animating = () => raf !== 0;
 
+  /**
+   * Frame pacing. At rest the only motion is a 0.05 rad/s turn and a small bob, which looks the same at 30 fps as at
+   * the display's 120 or 144 Hz; drawing every vsync was pure GPU and main-thread cost (measured: the scene ran at
+   * 120 fps idle). Full rate comes back the moment anything transitions: a token moving lane, the seal resizing, a
+   * verdict pulse or pointer parallax. The ledger relief behind the hero (plate.ts) is capped at 30 fps the same way.
+   */
+  const IDLE_FRAME_MS = 1000 / 30;
+  let lastDraw = 0;
+  function transitioning(): boolean {
+    if (coreTween?.isActive() || gsap.isTweening(tilt.rotation)) return true;
+    for (let i = pulses.length - 1; i >= 0; i--) {
+      if (pulses[i]!.isActive()) return true;
+      pulses.splice(i, 1); // finished: drop it so the list does not grow for the life of the page
+    }
+    for (const t of tokens.values()) if (t.tw?.isActive()) return true;
+    return false;
+  }
+
   function place(t: Token): void {
     const bob = animating() ? Math.sin(elapsed * 1.3 + t.phase) * 0.03 : 0;
     t.mesh.position.set(Math.cos(t.p.a) * t.p.r, t.p.y + bob, Math.sin(t.p.a) * t.p.r);
@@ -179,8 +197,12 @@ export function createHoldScene(canvas: HTMLCanvasElement, opts: { reduced: bool
     renderer.render(scene, camera);
   }
 
-  function frame(): void {
+  function frame(now: number): void {
     raf = requestAnimationFrame(frame);
+    // 1 ms slack so a 33.3 ms vsync pair on a 60 Hz display is not skipped by rounding.
+    if (now - lastDraw < IDLE_FRAME_MS - 1 && !transitioning()) return;
+    lastDraw = now;
+    // dt keeps the 0.05 s cap: a skipped frame at 30 fps is ~0.033 s, so motion speed is the same at any frame rate.
     const dt = Math.min(clock.getDelta(), 0.05);
     elapsed += dt;
     spin.rotation.y += dt * 0.05;

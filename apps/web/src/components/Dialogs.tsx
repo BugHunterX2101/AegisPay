@@ -6,6 +6,18 @@ import { useStore } from '../store.ts';
 import type { OrderRow } from '../types.ts';
 import { Modal } from './Modal.tsx';
 
+/** What the order routes answer with: the updated grid row (null only if the order vanished). */
+type OrderResponse = { order?: OrderRow | null };
+
+/**
+ * Apply the row the route returned instead of reloading every order and dispute: that was two more round trips before
+ * the dialog closed. The stream's copy of the same change arrives later and is a no-op (rowVersion only grows).
+ */
+async function applyOrder(r: OrderResponse): Promise<void> {
+  if (r.order) useStore.getState().upsertOrder(r.order);
+  else await loadAll();
+}
+
 const CARRIERS = ['FEDEX', 'UPS', 'USPS', 'DHL', 'DHL_API', 'OTHER'] as const;
 /** What the API calls a carrier is not what a person reads. */
 const CARRIER_LABEL: Record<(typeof CARRIERS)[number], string> = {
@@ -22,9 +34,8 @@ export function ShipDialog({ order, onClose }: { order: OrderRow; onClose: () =>
   const submit = async () => {
     setBusy(true);
     try {
-      await api('POST', `/api/orders/${order.id}/ship`, { carrier, trackingNumber: trackingNumber.trim() });
+      await applyOrder(await api<OrderResponse>('POST', `/api/orders/${order.id}/ship`, { carrier, trackingNumber: trackingNumber.trim() }));
       toast('ok', 'Shipment recorded');
-      await loadAll();
       onClose();
     } catch (e) {
       toast('error', errorMessage(e));
@@ -60,9 +71,8 @@ export function CancelDialog({ order, onClose }: { order: OrderRow; onClose: () 
   const submit = async () => {
     setBusy(true);
     try {
-      await api('POST', `/api/orders/${order.id}/cancel`, {});
+      await applyOrder(await api<OrderResponse>('POST', `/api/orders/${order.id}/cancel`, {}));
       toast('ok', 'Order cancelled');
-      await loadAll();
       onClose();
     } catch (e) {
       toast('error', errorMessage(e));
@@ -94,9 +104,8 @@ export function VoidDialog({ order, onClose }: { order: OrderRow; onClose: () =>
   const submit = async () => {
     setBusy(true);
     try {
-      await api('POST', `/api/orders/${order.id}/void`, { reason, confirm: true });
+      await applyOrder(await api<OrderResponse>('POST', `/api/orders/${order.id}/void`, { reason, confirm: true }));
       toast('ok', 'Void requested: the hold is being released');
-      await loadAll();
       onClose();
     } catch (e) {
       toast('error', errorMessage(e));

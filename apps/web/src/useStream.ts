@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { api, getSession } from './api.ts';
 import { useStore } from './store.ts';
-import type { Dispute, FeedItem, OrderRow, SelfCheck } from './types.ts';
+import type { StreamBatch } from './store.ts';
+import type { Dispute, OrderRow, SelfCheck } from './types.ts';
 
 const FEED_EVENTS = ['agent.step', 'gate.decision', 'webhook.verified', 'mandate.draft'] as const;
 const MAX_RETRY_MS = 30_000;
@@ -22,17 +23,43 @@ const parse = <T,>(e: Event): T => JSON.parse((e as MessageEvent).data as string
 /** A reload the stream triggers on its own has no button to report a failure on; the next event or retry repairs it. */
 const reload = () => void loadAll().catch(() => undefined);
 
+/**
+ * Stream messages are queued and applied once per animation frame. Each SSE message is its own task, so React cannot
+ * batch them: a reconnect replay or an agent run of 60 events used to mean 60 store updates, 60 grid recomputes and 60
+ * syncs of the 3D scene and the relief, back to back. Now it is one of each per frame, and a frame never shows a
+ * half-applied burst. Order is kept: the store applies the batch in delivery order with the usual rowVersion rule.
+ * A hidden tab gets no animation frames, so there the queue is flushed on a timer instead of growing.
+ */
+const pending: StreamBatch = { orders: [], disputes: [], feed: [] };
+let scheduled = false;
+const HIDDEN_FLUSH_MS = 250;
+
+function flush(): void {
+  scheduled = false;
+  if (!pending.orders.length && !pending.disputes.length && !pending.feed.length) return;
+  const batch: StreamBatch = { orders: pending.orders.splice(0), disputes: pending.disputes.splice(0), feed: pending.feed.splice(0) };
+  useStore.getState().applyStream(batch);
+}
+
+function schedule(): void {
+  if (scheduled) return;
+  scheduled = true;
+  if (document.visibilityState === 'visible') requestAnimationFrame(flush);
+  else setTimeout(flush, HIDDEN_FLUSH_MS);
+}
+
 function wire(es: EventSource): void {
-  es.addEventListener('order.upsert', (e) => useStore.getState().upsertOrder(parse<OrderRow>(e)));
-  es.addEventListener('dispute.upsert', (e) => useStore.getState().upsertDispute(parse<Dispute>(e)));
+  es.addEventListener('order.upsert', (e) => { pending.orders.push(parse<OrderRow>(e)); schedule(); });
+  es.addEventListener('dispute.upsert', (e) => { pending.disputes.push(parse<Dispute>(e)); schedule(); });
   es.addEventListener('selfcheck.result', (e) => useStore.getState().setSelfcheck(parse<SelfCheck>(e)));
-  es.addEventListener('resync', reload);
+  // A resync replaces the grid wholesale: drop queued rows first so an older queued upsert cannot land after the reload.
+  es.addEventListener('resync', () => { pending.orders.length = 0; pending.disputes.length = 0; reload(); });
   for (const kind of FEED_EVENTS) {
     es.addEventListener(kind, (e) => {
       const data = parse<Record<string, unknown>>(e);
       const at = typeof data.at === 'string' ? data.at : new Date().toISOString();
-      const item: FeedItem = { key: `${kind}:${(e as MessageEvent).lastEventId || at}`, kind, at, data };
-      useStore.getState().pushFeed(item);
+      pending.feed.push({ key: `${kind}:${(e as MessageEvent).lastEventId || at}`, kind, at, data });
+      schedule();
     });
   }
 }

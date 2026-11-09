@@ -69,7 +69,6 @@ function SelfCheckDot() {
 function JudgePanel() {
   const offsetDays = useStore((s) => s.offsetDays);
   const setOffsetDays = useStore((s) => s.setOffsetDays);
-  const orders = useStore((s) => s.orders);
   const toast = useStore((s) => s.toast);
   const [busy, setBusy] = useState(false);
 
@@ -87,7 +86,8 @@ function JudgePanel() {
 
   // Jump just past the earliest open delivery deadline so the SLA breach flow can be shown for real.
   const pastSla = () => {
-    const open = Object.values(orders).filter((o) => o.state === 'HELD' || o.state === 'IN_TRANSIT');
+    // Read at click time: subscribing to every order would re-render this panel on each stream event for nothing.
+    const open = Object.values(useStore.getState().orders).filter((o) => o.state === 'HELD' || o.state === 'IN_TRANSIT');
     if (open.length === 0) return toast('error', 'No held order is waiting on delivery');
     const earliest = Math.min(...open.map((o) => new Date(endOfDay(o.deliverBy)).getTime()));
     // floor(x) + 1 > x, so real now + needed days is strictly past the deadline (both sides UTC, like the worker's sweep).
@@ -186,22 +186,28 @@ export function TopBar() {
   );
 }
 
-export function JudgeBanner() {
-  const session = useStore((s) => s.session);
-  const orders = useStore((s) => s.orders);
-  const feed = useStore((s) => s.feed);
-  if (!session?.judgeMode) return null;
-  const list = Object.values(orders);
+const STEP_LABELS = ['Mandate drafted', 'Gatekeeper passed an offer', 'Buyer approved: hold placed', 'Delivery recorded', 'Captured after the proof gate'] as const;
+
+/** Which demo steps are done, as a string of 0/1 so the banner re-renders only when a step flips, not on every event. */
+function stepsDone(s: ReturnType<typeof useStore.getState>): string {
+  const list = Object.values(s.orders);
   const past = (...states: string[]) => list.some((o) => states.includes(o.state));
-  const steps: Array<[string, boolean]> = [
-    ['Mandate drafted', list.length > 0 || feed.some((f) => f.kind === 'mandate.draft')],
-    ['Gatekeeper passed an offer', list.some((o) => o.gatePass === true)],
+  return [
+    list.length > 0 || s.feed.some((f) => f.kind === 'mandate.draft'),
+    list.some((o) => o.gatePass === true),
     // Every state at or after the step counts (order-state.ts): FAILED is only reachable from DELIVERED, and REFUNDED only
     // from SETTLED or DISPUTED, so a failed capture still placed a hold and recorded delivery, and a refund was captured.
-    ['Buyer approved: hold placed', past('HELD', 'IN_TRANSIT', 'DELIVERED', 'SETTLED', 'FAILED', 'VOIDED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED')],
-    ['Delivery recorded', list.some((o) => o.deliveredAt) || past('DELIVERED', 'SETTLED', 'FAILED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED')],
-    ['Captured after the proof gate', past('SETTLED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED')],
-  ];
+    past('HELD', 'IN_TRANSIT', 'DELIVERED', 'SETTLED', 'FAILED', 'VOIDED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED'),
+    list.some((o) => o.deliveredAt) || past('DELIVERED', 'SETTLED', 'FAILED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED'),
+    past('SETTLED', 'DISPUTED', 'EVIDENCE_SUBMITTED', 'RESOLVED_WON', 'RESOLVED_LOST', 'REFUNDED'),
+  ].map((d) => (d ? '1' : '0')).join('');
+}
+
+export function JudgeBanner() {
+  const judgeMode = useStore((s) => s.session?.judgeMode === true);
+  const done = useStore(stepsDone);
+  if (!judgeMode) return null;
+  const steps = STEP_LABELS.map((label, i) => [label, done[i] === '1'] as const);
   return (
     <div className="banner" data-testid="judge-banner">
       <div>

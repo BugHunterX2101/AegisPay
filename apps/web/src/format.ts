@@ -2,12 +2,27 @@ import { useSyncExternalStore } from 'react';
 import { useStore } from './store.ts';
 import type { OrderState } from './types.ts';
 
+// Intl formatters are expensive to construct (locale data is resolved on every `new`) and cheap to reuse, so each one
+// is built once. money() runs for every grid cell and every total on each render; it used to build a formatter per call.
+const currencyFmt = new Map<string, { fmt: Intl.NumberFormat; scale: number }>();
+function currencyFormatter(currency: string): { fmt: Intl.NumberFormat; scale: number } {
+  let f = currencyFmt.get(currency);
+  if (!f) {
+    const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency });
+    f = { fmt, scale: 10 ** (fmt.resolvedOptions().maximumFractionDigits ?? 2) };
+    currencyFmt.set(currency, f);
+  }
+  return f;
+}
+const DAY_FMT = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+const STAMP_FMT = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'medium' });
+const CLOCK_FMT = new Intl.DateTimeFormat('en-US', { timeStyle: 'medium' });
+
 /** Minor units (a decimal string, as the API sends bigints) to a currency string. */
 export function money(minor: string | null | undefined, currency = 'USD'): string {
   if (minor == null) return '';
-  const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency });
-  const digits = fmt.resolvedOptions().maximumFractionDigits ?? 2;
-  return fmt.format(Number(minor) / 10 ** digits);
+  const { fmt, scale } = currencyFormatter(currency);
+  return fmt.format(Number(minor) / scale);
 }
 
 export const STATE_LABEL: Record<OrderState, string> = {
@@ -26,15 +41,14 @@ export const humanize = (s: string | null | undefined): string => {
 export const formatDay = (ymd: string | null | undefined): string => {
   if (!ymd) return '';
   const d = new Date(`${ymd}T00:00:00Z`);
-  return Number.isNaN(d.getTime()) ? ymd : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return Number.isNaN(d.getTime()) ? ymd : DAY_FMT.format(d);
 };
 
 /** A timestamp as `Nov 8, 2026, 12:58:54 AM`, in the viewer's timezone but one fixed language, like the money and dates. */
-export const formatStamp = (iso: string | number | Date): string =>
-  new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' });
+export const formatStamp = (iso: string | number | Date): string => STAMP_FMT.format(new Date(iso));
 
 /** Just the time of day, for lines that sit under a date already (a drawer, a "checked at"). */
-export const formatClock = (iso: string | number | Date): string => new Date(iso).toLocaleTimeString('en-US', { timeStyle: 'medium' });
+export const formatClock = (iso: string | number | Date): string => CLOCK_FMT.format(new Date(iso));
 
 export const formatBytes =(n: number): string => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 

@@ -30,9 +30,11 @@ export function PayPalApproveDialog({ order, onClose }: { order: OrderRow; onClo
   const authorize = async () => {
     setPhase('authorizing');
     try {
-      await api('POST', `/api/orders/${order.id}/authorize`, {});
+      // The route answers with the HELD grid row: apply it directly rather than reloading every order and dispute.
+      const r = await api<{ order?: OrderRow | null }>('POST', `/api/orders/${order.id}/authorize`, {});
+      if (r.order) useStore.getState().upsertOrder(r.order);
+      else await loadAll();
       toast('ok', 'Approved: the hold is in place');
-      await loadAll();
       onClose();
     } catch (e) {
       // 422 INSTRUMENT_DECLINED: PayPal refused the funding source the buyer picked. Trying it again cannot work, so the

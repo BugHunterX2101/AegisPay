@@ -22,6 +22,8 @@ interface AppState {
   setDisputes: (rows: Dispute[]) => void;
   upsertDispute: (d: Dispute) => void;
   pushFeed: (item: FeedItem) => void;
+  /** Everything the live stream delivered since the last frame, applied as one store update (useStream batches). */
+  applyStream: (batch: StreamBatch) => void;
   setSelfcheck: (s: SelfCheck) => void;
   setStream: (s: StreamStatus) => void;
   setOffsetDays: (n: number) => void;
@@ -29,6 +31,13 @@ interface AppState {
   openEvidence: (id: string | null) => void;
   toast: (kind: Toast['kind'], text: string) => void;
   dismissToast: (id: number) => void;
+}
+
+export interface StreamBatch {
+  orders: OrderRow[];
+  disputes: Dispute[];
+  /** Oldest first, as delivered. */
+  feed: FeedItem[];
 }
 
 const FEED_MAX = 200;
@@ -69,6 +78,31 @@ export const useStore = create<AppState>((set) => ({
   upsertDispute: (d) => set((s) => ({ disputes: { ...s.disputes, [d.paypalDisputeId]: d } })),
   pushFeed: (item) =>
     set((s) => (s.feed.some((f) => f.key === item.key) ? s : { feed: [item, ...s.feed].slice(0, FEED_MAX) })),
+  applyStream: (b) =>
+    set((s) => {
+      const next: Partial<AppState> = {};
+      // Same rule as upsertOrder, applied in delivery order: rowVersion only grows, so a replayed older row never wins.
+      let orders: Record<string, OrderRow> | undefined;
+      for (const row of b.orders) {
+        const cur = (orders ?? s.orders)[row.id];
+        if (cur && cur.rowVersion > row.rowVersion) continue;
+        orders ??= { ...s.orders };
+        orders[row.id] = row;
+      }
+      if (orders) next.orders = orders;
+      if (b.disputes.length) {
+        const disputes = { ...s.disputes };
+        for (const d of b.disputes) disputes[d.paypalDisputeId] = d;
+        next.disputes = disputes;
+      }
+      if (b.feed.length) {
+        const seen = new Set(s.feed.map((f) => f.key));
+        const fresh: FeedItem[] = [];
+        for (const item of b.feed) if (!seen.has(item.key)) { seen.add(item.key); fresh.unshift(item); }
+        if (fresh.length) next.feed = [...fresh, ...s.feed].slice(0, FEED_MAX);
+      }
+      return Object.keys(next).length ? next : s;
+    }),
   setSelfcheck: (selfcheck) => set({ selfcheck }),
   setStream: (stream) => set({ stream }),
   setOffsetDays: (offsetDays) => set({ offsetDays }),
