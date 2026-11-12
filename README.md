@@ -233,12 +233,23 @@ Orders, authorizations, captures and refunds go through `@paypal/paypal-server-s
 | Orders v2: authorize | Turn the approved order into an authorization | `authorizeHold` |
 | Orders v2: add tracking | Push carrier + tracking after capture | `pushTracking` |
 | Payments v2: show / capture / void / reauthorize authorization | Proof-gated capture, released holds, extending a hold | `authorizations.ts` |
-| Payments v2: refund capture, show refund | Partial and full refunds (a library function that no API route calls), and reconciling `PENDING` refunds | `refunds.ts` |
+| Payments v2: refund capture, show refund | Partial and full refunds (a library function that no API route calls yet; the PRD lists a human-confirmed refund action as P1), and reconciling `PENDING` refunds | `refunds.ts` |
 | Payments v2: show capture | Reconcile on webhook | `webhooks/process.ts` |
 | Webhooks: verify-webhook-signature, certificate download | Online postback check, plus an offline RSA-SHA256 check for simulator events | `webhooks/verify*.ts` |
 | Webhooks: simulate-event | Prove the webhook path against the live sandbox | `webhooks/simulate.ts` |
 | Customer Disputes v1: show, provide-evidence, provide-supporting-info | Dispute defense | `disputes.ts` |
 | JS SDK v6 (browser) | Buyer approval. `findEligibleMethods()` runs before the button is enabled. `start()` receives a promise of `{ orderId }` | [`apps/web/src/components/PayPalApprove.tsx`](apps/web/src/components/PayPalApprove.tsx) |
+
+**Proven against the live sandbox through the console's own buttons (2026-11-12):**
+
+| Flow | Path through the UI | Result PayPal reports |
+|------|---------------------|-----------------------|
+| Approve, Ship, Delivered | JS SDK button, then Ship and Delivered | Capture `COMPLETED`, authorization `CAPTURED`, tracker `SHIPPED` on the order |
+| Approve, Void | JS SDK button, then Void | Authorization `VOIDED` |
+
+These runs left `PAYPAL_CALL` rows for authorize (201), capture (201), track (201) and void (204). The audit chain reads `HOLD_AUTHORIZED`, `SHIPPED`, `DELIVERED`, `CAPTURED`, `TRACKING_PUSHED`, then `VOID_REQUESTED`, `HOLD_VOIDED`. The IDs are in [`docs/SANDBOX_VERIFICATION.md`](docs/SANDBOX_VERIFICATION.md) §1a–1b.
+
+Not yet proven live: issuing a refund (no route exists) and `provide-evidence` (see [Dispute defense](#dispute-defense)).
 
 ### Idempotency, retries, audit
 
@@ -316,6 +327,16 @@ The first two are a backstop for a browser `onApprove` that never reached the AP
 7. **Crash recovery.** PayPal may accept the POST and the local commit may then fail. In that case the next attempt finds the `ok: true` audit row, finishes locally and sends nothing (`EVIDENCE_SUBMIT_RECOVERED`).
 
 Status against the real sandbox: the `provide-supporting-info` path was answered live on 2026-11-09. `provide-evidence` is covered only by the local PayPal double. Details are in [`docs/SANDBOX_VERIFICATION.md`](docs/SANDBOX_VERIFICATION.md).
+
+`provide-evidence` cannot be run live today, for two reasons:
+
+- **The status is wrong.** PayPal accepts the seller's evidence only while a dispute is `WAITING_FOR_SELLER_RESPONSE` and its `provide-evidence` link is present ([PayPal: provide evidence](https://developer.paypal.com/api/customer-disputes/v1/disputes-provide-evidence)). The only sandbox dispute, `PP-R-EVA-10196999`, is a `CHARGEBACK` in `UNDER_REVIEW`.
+- **Only a buyer can open a dispute.** The sandbox orders here are paid by guest card, so no buyer account exists to open a new one.
+
+Two ways to get there:
+
+- PayPal's sandbox-only `POST /v1/customer/disputes/{id}/require-evidence` with `{"action":"SELLER_EVIDENCE"}` moves an `UNDER_REVIEW` dispute that shows the `require-evidence` link to `WAITING_FOR_SELLER_RESPONSE` ([PayPal: update dispute status](https://developer.paypal.com/api/customer-disputes/v1/disputes-require-evidence)). That change to the dispute is permanent.
+- A sandbox *personal* buyer account can pay an order and open a fresh dispute.
 
 ---
 
@@ -508,6 +529,19 @@ pnpm start:worker          # second terminal
 
 Without `pnpm build`, the API serves JSON only. PayPal writes stay off until `PAYPAL_WRITES_ENABLED=true`. Agent routes answer `503 AGENT_UNAVAILABLE` until a model key and `CHANNEL3_API_KEY` are set. Webhooks stay unverified until the API has a public HTTPS URL and you run `pnpm register-webhook <url>`.
 
+**Running locally against the sandbox:**
+
+- **Webhooks go to the registered URL, not to your machine.** A local instance still works without them:
+  - The browser's `onApprove` places the hold through `POST /api/orders/:id/authorize`.
+  - `poll.open` checks every 2 minutes for approved but unauthorized orders, holds PayPal voided or let expire, and open disputes.
+- **Writes have to be on in the process that makes the call.** The API authorizes the hold. The worker captures, voids, reauthorizes and pushes tracking.
+  - With writes off, a capture or void is not lost. The worker logs `job.deferred`, writes `PAYPAL_CALL_BLOCKED` / `WRITES_DISABLED` to the audit log, and queues the job again 60 s later.
+  - It runs once writes are on, and you don't have to click Delivered again.
+- **Use `127.0.0.1`, not `localhost`, in `DATABASE_URL` and `TEST_DATABASE_URL` if Postgres connections hang.**
+  - Seen on Docker Desktop for Windows: `localhost` resolved to `::1`, and new connections over the IPv6 forward on `:54329` timed out, while `127.0.0.1` connected in under 50 ms.
+  - Symptoms: every DB test hook times out at 10 s. The same setup is the likely cause of an intermittent API 500 seen on `GET /api/disputes`, which stopped after the switch.
+  - Docker's documentation does not describe this, so it is a field note, not a guarantee.
+
 ### Commands
 
 | Command | What it does |
@@ -533,6 +567,10 @@ Without `pnpm build`, the API serves JSON only. PayPal writes stay off until `PA
 ## Configuration
 
 Variables are read from the environment. The apps load the root `.env` through `tsx --env-file-if-exists`. [`.env.example`](.env.example) documents each one.
+
+**A variable already set in the shell wins over `.env`.** This is Node's documented `--env-file` rule, and Node 24.18 behaves that way. So an exported `PAYPAL_WRITES_ENABLED` or `DATABASE_URL` overrides the file without any warning.
+- If writes are unexpectedly off (`job.deferred`) or on, check the shell before checking `.env`.
+- The same applies the other way round: to turn writes on for one run without editing `.env`, set the variable on that process only.
 
 | Variable | Required | Notes |
 |----------|----------|-------|
@@ -608,9 +646,9 @@ A free web service sleeps after 15 idle minutes. This delays the worker's schedu
 - **Sandbox only, single currency (USD).** The PayPal payee is one sandbox merchant.
 - **Some inputs are simulated.**
   - Fulfilment and lead times are simulated. Channel3 returns no shipping, tax or ETA, so proposals record shipping and tax as `0` and take the ETA from `supplier_profile`. The proposal rationale states this.
-  - `refundCapture` and `reconcileRefund` are implemented and tested, but no API route issues a refund. A refund made in PayPal reaches AegisPay through `PAYMENT.CAPTURE.REFUNDED`, and the worker reconciles `PENDING` refunds.
+  - `refundCapture` and `reconcileRefund` are implemented and tested, but no API route issues a refund. The PRD lists a human-confirmed refund action as P1. A refund made in PayPal reaches AegisPay through `PAYMENT.CAPTURE.REFUNDED`, and the worker reconciles `PENDING` refunds. The sandbox usually completes a refund at once, so the `PENDING` → `COMPLETED` transition has been exercised only against the local PayPal double.
 - **Judge Mode is global.** The demo clock and the reset are shared by every visitor.
-- **`provide-evidence` is unproven live.** It is covered by the local PayPal double, but the live sandbox dispute only ever offered `provide-supporting-info`.
+- **`provide-evidence` is unproven live.** It is covered by the local PayPal double, but the live sandbox dispute only ever offered `provide-supporting-info`. The reason and the two ways to get there are under [Dispute defense](#dispute-defense).
 - **Bundle size.** The entry script is 432 kB (146 kB gzipped). AG Grid Enterprise (929 kB / 267 kB gzipped) and the three.js hold scene (557 kB / 139 kB gzipped) load as separate on-demand chunks.
 - **Every other spec deviation and unconfirmed behavior** is listed in [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md).
 
