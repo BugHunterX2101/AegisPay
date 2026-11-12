@@ -33,6 +33,25 @@ An earlier run the same day left `CHECKOUT.ORDER.APPROVED` (`30V02973E7085940M`)
 The hosted demo's order rows for this run were later cleared by a Judge Mode reset. The audit chain was not touched: on
 2026-11-08 `GET /api/audit/verify` on the hosted demo answered `ok: true` over 547 rows.
 
+## 1a. Approval through the product's own buttons (2026-11-12)
+
+The test files approve holds by calling the API directly. This run used the console's UI instead, on a local build at
+commit `3fd6ccd`, driven by headless Chromium. Steps: grid **Approve**, then the dialog's **Open the sandbox checkout in
+a new tab**, then PayPal's guest card checkout (no buyer login), then **I approved it: place the hold**. The Desk Lamp
+row moved from `Awaiting approval` to `Held` ($14.97), the SLA timer started, and the ledger row
+(`01a1d02f-9e69-7532-b06b-0b9ae4e8317a`) reads `HELD` with the IDs below.
+
+| Step | PayPal ID | What PayPal reports (GET, 2026-11-12) | `debug_id` of that GET |
+|------|-----------|---------------------------------------|------------------------|
+| Orders v2 order, `intent: AUTHORIZE`, invoice `AEG-0B9AE4E8317A` | `9W4868978B649601B` | `COMPLETED`, 14.97 USD (shipping 0.00) | `f96735532711a` |
+| Authorization | `1FH84833X9346115F` | `CREATED`, 14.97 USD, created 2026-11-12T14:53:13Z, expires 2026-12-11T14:53:13Z | `f424196452a05` |
+
+PayPal recorded `CHECKOUT.ORDER.APPROVED` (`WH-97R18149T1738493V-4EW96774AF168522C`) and
+`PAYMENT.AUTHORIZATION.CREATED` (`WH-4C736196L9547571T-48M108770D911643A`) for this run. Both went to the registered
+endpoint, `https://aegispay-w12c.onrender.com/webhooks/paypal`, not to the local app.
+
+**Not covered.** The hold was not shipped, delivered or captured.
+
 ## 2. What the live dispute taught us
 
 - PayPal moved the buyer's claim straight to `UNDER_REVIEW` / `CHARGEBACK`. The only actions it offers are `accept_claim`
