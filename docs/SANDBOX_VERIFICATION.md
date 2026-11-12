@@ -50,7 +50,36 @@ PayPal recorded `CHECKOUT.ORDER.APPROVED` (`WH-97R18149T1738493V-4EW96774AF16852
 `PAYMENT.AUTHORIZATION.CREATED` (`WH-4C736196L9547571T-48M108770D911643A`) for this run. Both went to the registered
 endpoint, `https://aegispay-w12c.onrender.com/webhooks/paypal`, not to the local app.
 
-**Not covered.** The hold was not shipped, delivered or captured.
+## 1b. Ship, deliver, capture, tracking and void through the UI (2026-11-12)
+
+Same local build and the same headless Chromium. The API and worker ran with `PAYPAL_WRITES_ENABLED=true` set in their
+own process environment; the root `.env` still says `false`.
+
+**Ship, Delivered, capture, tracking** on the Desk Lamp hold from section 1a. In the grid: **Ship**, carrier UPS,
+tracking `1Z999AA10123456784`, then **Delivered**. The worker captured and pushed tracking without further input. The
+row ended `Settled`. The ledger order reads `SETTLED`. Its fulfillment row has `pushed_to_paypal_at` set. The audit
+chain reads `SHIPPED`, `DELIVERED`, `CAPTURED`, `TRACKING_PUSHED`.
+
+| What | PayPal ID | What PayPal reports (GET, 2026-11-12) |
+|------|-----------|---------------------------------------|
+| Capture | `1Y66282955390551F` | `COMPLETED`, 14.97 USD, fee 1.04, net 13.93, `final_capture: true`, debug_id of the capture call `f1898690c7866` |
+| Authorization | `1FH84833X9346115F` | `CAPTURED` |
+| Order tracker | `1Y66282955390551F-1Z999AA10123456784` | `SHIPPED` on order `9W4868978B649601B` (track call debug_id `f98822152773c`) |
+
+The first capture attempt ran with writes still off. The worker logged `PAYPAL_CALL_BLOCKED` / `WRITES_DISABLED` and
+put the job back on the queue for 60 s later instead of using up a retry. The next attempt after writes were turned on
+captured once.
+
+**Approve, then Void** on the Stainless Steel Water Bottle order (`01a1d02f-1c20-7eb0-b0e7-a07a328e8f1b`, PayPal order
+`7VN51637GR5637633`, 13.98 USD). This time the dialog's **PayPal** button was used: the JS SDK v6 popup took
+PayPal's guest card checkout, and its `onApprove` placed the hold (authorize 201, `HOLD_AUTHORIZED`). Then the grid
+went **Void**, reason `CANCEL`, **Void the hold**. The audit chain reads `VOID_REQUESTED`, void 204 (debug_id
+`f969828b4c0cf`), `HOLD_VOIDED`. PayPal reports authorization `47439648PM3242503` as `VOIDED`, 13.98 USD.
+
+**Not covered.**
+- No refund. No API route issues one (see the README).
+- Evidence was not sent through the console's Evidence dialog. The only sandbox dispute, `PP-R-EVA-10196999`, is a
+  `CHARGEBACK` in `UNDER_REVIEW`, PayPal offers it no `provide-evidence` action, and it is not in the local ledger.
 
 ## 2. What the live dispute taught us
 
