@@ -1,7 +1,7 @@
 # Graph Report - AegisPay  (2026-11-12)
 
 ## Corpus Check
-- 205 files · ~169,849 words
+- 205 files · ~170,421 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 5 file(s) not represented in the graph (top: (none) 3, .example 1, .css 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e0799195`
+- Built from commit: `61fa5c04`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
