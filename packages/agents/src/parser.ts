@@ -65,12 +65,29 @@ export function toDraft(p: ParsedMandate): MandateDraft {
  * The draft is shown either way (the owner reads and edits it); this just points at what to double-check.
  */
 export function ungroundedWarnings(p: ParsedMandate, text: string): string[] {
-  const written = new Set(figures(text).map(Number));
+  const written = new Set([...figures(text).map(Number), ...numberWords(text)]);
   const warnings: string[] = [];
-  if (!written.has(p.quantity)) warnings.push(`Quantity ${p.quantity} does not appear in your request. Please check it.`);
+  // "Buy a lamp" asks for one: the article counts as a written quantity, but never as a dollar figure.
+  const quantityWritten = written.has(p.quantity) || (p.quantity === 1 && /\b(a|an|single)\b/i.test(text));
+  if (!quantityWritten) warnings.push(`Quantity ${p.quantity} does not appear in your request. Please check it.`);
   if (!written.has(Number(p.unitCeilingUsd))) warnings.push(`Per-unit ceiling $${p.unitCeilingUsd} does not appear in your request. Please check it.`);
   if (!written.has(Number(p.budgetUsd))) warnings.push(`Budget $${p.budgetUsd} does not appear in your request. Please check it.`);
   return warnings;
+}
+
+const UNITS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+
+/** Whole numbers written as English words, up to ninety-nine plus "dozen", so "one lamp" or "twenty dollars" is grounded. */
+export function numberWords(text: string): number[] {
+  const out: number[] = [];
+  const re = /\b(?:(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:[\s-]+(one|two|three|four|five|six|seven|eight|nine))?|(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen)|(dozen))\b/gi;
+  for (const m of text.matchAll(re)) {
+    if (m[1]) out.push(TENS.indexOf(m[1].toLowerCase()) * 10 + (m[2] ? UNITS.indexOf(m[2].toLowerCase()) : 0));
+    else if (m[3]) out.push(UNITS.indexOf(m[3].toLowerCase()));
+    else out.push(12);
+  }
+  return out;
 }
 
 export interface ParseResult {

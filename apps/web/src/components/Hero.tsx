@@ -23,15 +23,19 @@ function feedPulse(st: StoreState, prev: StoreState): PlatePulse | null {
 
 gsap.registerPlugin(useGSAP);
 
-/** Still picture for a browser without WebGL: the same five lanes as the 3D scene, as rings. */
+/**
+ * Still picture for a browser without WebGL: the same five lanes as the 3D scene, as rings in the scene's order from
+ * the core out (held, gate, settled, proposed, released; RADIUS in scene/holdScene.ts). Solid rings are the ones the
+ * scene draws solid; the two waiting lanes are dashed there and here.
+ */
 function RingsFallback() {
-  const rings: Array<[string, number]> = [
-    ['var(--sc-slate)', 46], ['var(--sc-garnet)', 38], ['var(--sc-green)', 30], ['var(--sc-brass)', 22], ['var(--sc-teal)', 14],
+  const rings: Array<[string, number, boolean]> = [
+    ['var(--sc-brass)', 14, false], ['var(--sc-garnet)', 22, false], ['var(--sc-green)', 30, false], ['var(--sc-teal)', 38, true], ['var(--sc-slate)', 46, true],
   ];
   return (
     <svg className="hero-fallback" viewBox="0 0 100 100" aria-hidden="true">
-      {rings.map(([c, r]) => (
-        <circle key={r} cx="50" cy="50" r={r} fill="none" stroke={c} strokeWidth="1.2" strokeDasharray={r === 22 ? '0' : '2 3'} />
+      {rings.map(([c, r, dashed]) => (
+        <circle key={r} cx="50" cy="50" r={r} fill="none" stroke={c} strokeWidth="1.2" strokeDasharray={dashed ? '2 3' : undefined} />
       ))}
       <circle cx="50" cy="50" r="5" fill="var(--sc-accent)" />
     </svg>
@@ -42,6 +46,8 @@ function RingsFallback() {
 function useHoldScene(canvas: React.RefObject<HTMLCanvasElement | null>, paused: boolean, reduced: boolean) {
   const scene = useRef<HoldScene | null>(null);
   const [failed, setFailed] = useState(false);
+  // The canvas stays transparent until the scene has drawn, so the figure fades in whole instead of popping in late.
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const el = canvas.current;
@@ -59,6 +65,8 @@ function useHoldScene(canvas: React.RefObject<HTMLCanvasElement | null>, paused:
         if (!s) return setFailed(true);
         scene.current = s;
         s.setOrders(sceneOrders(useStore.getState().orders));
+        // Two frames: one for the scene's first draw, one for the browser to composite it.
+        requestAnimationFrame(() => requestAnimationFrame(() => !cancelled && setReady(true)));
         unsub = [
           onThemeChange(() => s.refreshTheme()),
           useStore.subscribe((st, prev) => {
@@ -82,7 +90,7 @@ function useHoldScene(canvas: React.RefObject<HTMLCanvasElement | null>, paused:
 
   useEffect(() => scene.current?.setPaused(paused), [paused]);
   useEffect(() => scene.current?.setReduced(reduced), [reduced]);
-  return failed;
+  return { failed, ready };
 }
 
 /** The ledger relief at the foot of the hero (scene/plate.ts): one ridge per lane, risen with the live order counts. It has its own band of clean ground, so it needs nothing else to lay out. */
@@ -129,7 +137,7 @@ export function Hero() {
   const plateCanvas = useRef<HTMLCanvasElement>(null);
   const reduced = useReducedMotion();
   const [paused, setPaused] = useState(false);
-  const failed = useHoldScene(canvas, paused || reduced, reduced);
+  const { failed, ready } = useHoldScene(canvas, paused || reduced, reduced);
   usePlate(plateCanvas, root, paused, reduced);
 
   const orders = useStore((s) => s.orders);
@@ -144,7 +152,8 @@ export function Hero() {
           .timeline({ defaults: { ease: ease.out, duration: dur.enter } })
           .from('[data-enter="line"]', { yPercent: 105, stagger: 0.09 })
           .from('[data-enter="fade"]', { autoAlpha: 0, y: 14, stagger: 0.07, duration: dur.slow }, '-=0.7')
-          .from('.hero-stage', { autoAlpha: 0, scale: 0.96, duration: dur.travel }, 0.1);
+          // Only the caption enters here; the canvas fades itself in once the scene has drawn (.hero-canvas.is-ready).
+          .from('.hero-stage figcaption', { autoAlpha: 0, y: 10, duration: dur.slow }, 0.3);
       });
       return () => mm.revert();
     },
@@ -183,7 +192,7 @@ export function Hero() {
 
       <figure className="hero-stage" aria-label="Live view of every order in this demo, grouped by where its money is">
         <div className="stage-frame">
-          {failed ? <RingsFallback /> : <canvas ref={canvas} className="hero-canvas" aria-hidden="true" />}
+          {failed ? <RingsFallback /> : <canvas ref={canvas} className={ready ? 'hero-canvas is-ready' : 'hero-canvas'} aria-hidden="true" />}
           {/* One control for everything that moves on its own in the hero: the scene and the plate. */}
           {!reduced && (
             <button className="stage-pause sm" onClick={() => setPaused((p) => !p)}>

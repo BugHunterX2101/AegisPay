@@ -233,5 +233,13 @@ describe('helpers', () => {
     expect(hasWholeWord('Cafébar', 'café')).toBe(false);
     expect(hasWholeWord('anything', '')).toBe(false);
   });
+
+  it('hasWholeWord treats a space or dash inside a term as the same separator', () => {
+    expect(hasWholeWord('C2G 6ft USB C Cable', 'USB-C')).toBe(true);
+    expect(hasWholeWord('Anker USB-C to USB-C', 'usb c')).toBe(true);
+    expect(hasWholeWord('Hub with USB – C port', 'USB-C')).toBe(true);
+    expect(hasWholeWord('USBC adapter', 'USB-C')).toBe(false);
+    expect(hasWholeWord('USB-CX dock', 'USB-C')).toBe(false);
+  });
   it('normalizeDomain', () => expect(normalizeDomain(' WWW.A.com. ')).toBe('a.com'));
 });

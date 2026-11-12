@@ -116,20 +116,28 @@ export function createHoldScene(canvas: HTMLCanvasElement, opts: { reduced: bool
   gate.add(gateRing, ticks);
   spin.add(gate);
 
-  // ---- the ledger ring (captured) and the dashed proposal track
-  const ledgerMat = new THREE.MeshStandardMaterial({ color: col.teal, metalness: 0.4, roughness: 0.35 });
+  // ---- the ledger ring (captured), the dashed proposal track and the faint released orbit.
+  // Each ring takes its lane's legend colour (styles.css .swatch-*), so the figure and its key read as one thing.
+  const ledgerMat = new THREE.MeshStandardMaterial({ color: col.green, metalness: 0.4, roughness: 0.35 });
   const ledger = new THREE.Mesh(new THREE.TorusGeometry(RADIUS.settled, 0.018, 8, 200), ledgerMat);
   ledger.rotation.x = Math.PI / 2;
   spin.add(ledger);
-  const trackPts: THREE.Vector3[] = [];
-  for (let i = 0; i <= 160; i++) {
-    const a = (i / 160) * Math.PI * 2;
-    trackPts.push(new THREE.Vector3(Math.cos(a) * RADIUS.proposed, 0, Math.sin(a) * RADIUS.proposed));
-  }
-  const trackMat = new THREE.LineDashedMaterial({ color: col.slate, dashSize: 0.12, gapSize: 0.1, transparent: true, opacity: 0.7 });
-  const track = new THREE.Line(new THREE.BufferGeometry().setFromPoints(trackPts), trackMat);
+  const circle = (r: number) => {
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= 160; i++) {
+      const a = (i / 160) * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r));
+    }
+    return new THREE.BufferGeometry().setFromPoints(pts);
+  };
+  const trackMat = new THREE.LineDashedMaterial({ color: col.teal, dashSize: 0.12, gapSize: 0.1, transparent: true, opacity: 0.7 });
+  const track = new THREE.Line(circle(RADIUS.proposed), trackMat);
   track.computeLineDistances();
   spin.add(track);
+  const releasedMat = new THREE.LineDashedMaterial({ color: col.slate, dashSize: 0.04, gapSize: 0.14, transparent: true, opacity: 0.45 });
+  const releasedTrack = new THREE.Line(circle(RADIUS.released), releasedMat);
+  releasedTrack.computeLineDistances();
+  spin.add(releasedTrack);
 
   // ---- token shapes and materials, shared by every token in a lane
   const geo: Record<Lane, THREE.BufferGeometry> = {
@@ -140,11 +148,11 @@ export function createHoldScene(canvas: HTMLCanvasElement, opts: { reduced: bool
     released: new THREE.SphereGeometry(0.06, 16, 12),
   };
   const mat: Record<Lane, THREE.MeshStandardMaterial> = {
-    proposed: new THREE.MeshStandardMaterial({ color: col.slate, metalness: 0.2, roughness: 0.55 }),
+    proposed: new THREE.MeshStandardMaterial({ color: col.teal, metalness: 0.2, roughness: 0.55 }),
     held: new THREE.MeshStandardMaterial({ color: col.brass, metalness: 0.85, roughness: 0.28 }),
     settled: new THREE.MeshStandardMaterial({ color: col.green, metalness: 0.3, roughness: 0.4, emissive: col.green, emissiveIntensity: 0.15 }),
     gate: new THREE.MeshStandardMaterial({ color: col.garnet, metalness: 0.3, roughness: 0.35, emissive: col.garnet, emissiveIntensity: 0.2 }),
-    released: new THREE.MeshStandardMaterial({ color: col.slate, transparent: true, opacity: 0.35, depthWrite: false }),
+    released: new THREE.MeshStandardMaterial({ color: col.slate, transparent: true, opacity: 0.6, depthWrite: false }),
   };
 
   const tokens = new Map<string, Token>();
@@ -386,9 +394,10 @@ export function createHoldScene(canvas: HTMLCanvasElement, opts: { reduced: bool
       shellMat.color.copy(col.ink);
       shell2Mat.color.copy(col.ink);
       gateMat.color.copy(col.ink);
-      ledgerMat.color.copy(col.teal);
-      trackMat.color.copy(col.slate);
-      mat.proposed.color.copy(col.slate);
+      ledgerMat.color.copy(col.green);
+      trackMat.color.copy(col.teal);
+      releasedMat.color.copy(col.slate);
+      mat.proposed.color.copy(col.teal);
       mat.held.color.copy(col.brass);
       mat.settled.color.copy(col.green);
       mat.settled.emissive.copy(col.green);
@@ -412,7 +421,7 @@ export function createHoldScene(canvas: HTMLCanvasElement, opts: { reduced: bool
         if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments || o instanceof THREE.Line) o.geometry.dispose();
       });
       for (const g of Object.values(geo)) g.dispose();
-      for (const m of [...Object.values(mat), discMat, rimMat, shellMat, shell2Mat, gateMat, ledgerMat, trackMat]) m.dispose();
+      for (const m of [...Object.values(mat), discMat, rimMat, shellMat, shell2Mat, gateMat, ledgerMat, trackMat, releasedMat]) m.dispose();
       envTex.dispose();
       pmrem.dispose();
       room.dispose();

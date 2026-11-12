@@ -35,7 +35,10 @@ const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 export function hasWholeWord(haystack: string, term: string): boolean {
   const t = term.trim();
   if (t === '') return false;
-  const re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRe(t)}(?![\\p{L}\\p{N}])`, 'iu');
+  // Sellers write "USB-C", "USB C" and "USB – C" for the same thing: a space or dash inside a term matches any run of
+  // spaces and dashes in the title. Letters and digits still have to match exactly, so "USBC" is not "USB-C".
+  const body = t.split(/[\s\-‐‑–—]+/u).map(escapeRe).join('[\\s\\-‐‑–—]+');
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])${body}(?![\\p{L}\\p{N}])`, 'iu');
   return re.test(haystack);
 }
 

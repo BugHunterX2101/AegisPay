@@ -84,7 +84,28 @@ export function Lifecycle() {
 
         // Fonts change line heights, which moves the pin's start and end.
         document.fonts?.ready.then(() => ScrollTrigger.refresh()).catch(() => undefined);
+        // ScrollTrigger only re-measures on window resize, but the console above this section grows at runtime: offers
+        // load, orders join the grid, an audit trail expands. A stale start pins the stage early, over the grid. Watch
+        // the console (not <main>, which holds this pin's own spacer) and re-measure once per frame when it changes.
+        const consoleEl = document.getElementById('console');
+        let lastH = consoleEl?.offsetHeight ?? 0;
+        let raf = 0;
+        const ro = consoleEl
+          ? new ResizeObserver(() => {
+              const h = consoleEl.offsetHeight;
+              if (h === lastH) return;
+              lastH = h;
+              if (raf) return;
+              raf = requestAnimationFrame(() => {
+                raf = 0;
+                ScrollTrigger.refresh();
+              });
+            })
+          : null;
+        if (consoleEl) ro?.observe(consoleEl);
         return () => {
+          ro?.disconnect();
+          cancelAnimationFrame(raf);
           delete el.dataset.mode;
           ticks.forEach((t) => delete t.dataset.state);
         };

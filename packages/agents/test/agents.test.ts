@@ -12,6 +12,7 @@ import {
   draftEvidenceNotes,
   figures,
   modelFromEnv,
+  numberWords,
   parseMandateText,
   searchCatalog,
   shortlist,
@@ -95,6 +96,22 @@ describe('mandate parser', () => {
     const { model } = scripted(JSON.stringify({ ...goodParse, budgetUsd: '999' }));
     const r = await parseMandateText('Buy 12 bottles at $18.50 each by 2026-12-01', { model, now: NOW });
     expect(r.warnings.join(' ')).toContain('$999');
+  });
+
+  it('reads counts written as words, so "one lamp" or "a lamp" is not flagged', async () => {
+    expect(numberWords('one lamp, twenty-five dollars, a dozen pens, Ninety nine')).toEqual([1, 25, 12, 99]);
+    expect(numberWords('someone gave twentyish')).toEqual([]);
+    const lamp = { ...goodParse, quantity: 1, unitCeilingUsd: '20', budgetUsd: '20' };
+    const one = await parseMandateText('Buy one LED desk lamp for at most 20 dollars, delivered by 2026-12-01', { model: scripted(JSON.stringify(lamp)).model, now: NOW });
+    expect(one.warnings).toEqual([]);
+    const a = await parseMandateText('Buy a desk lamp, at most $20, by 2026-12-01', { model: scripted(JSON.stringify(lamp)).model, now: NOW });
+    expect(a.warnings).toEqual([]);
+    const words = await parseMandateText('Buy a desk lamp for twenty dollars by 2026-12-01', { model: scripted(JSON.stringify(lamp)).model, now: NOW });
+    expect(words.warnings).toEqual([]);
+    // The article grounds a quantity of one, never a dollar figure or a larger count.
+    const two = await parseMandateText('Buy a desk lamp, at most $20, by 2026-12-01', { model: scripted(JSON.stringify({ ...lamp, quantity: 2, budgetUsd: '40' })).model, now: NOW });
+    expect(two.warnings.join(' ')).toContain('Quantity 2');
+    expect(two.warnings.join(' ')).toContain('$40');
   });
 
   it('feeds a rejected answer back once, then accepts the corrected one', async () => {
