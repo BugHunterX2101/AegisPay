@@ -611,7 +611,7 @@ A free web service sleeps after 15 idle minutes. This delays the worker's schedu
   - `refundCapture` and `reconcileRefund` are implemented and tested, but no API route issues a refund. A refund made in PayPal reaches AegisPay through `PAYMENT.CAPTURE.REFUNDED`, and the worker reconciles `PENDING` refunds.
 - **Judge Mode is global.** The demo clock and the reset are shared by every visitor.
 - **`provide-evidence` is unproven live.** It is covered by the local PayPal double, but the live sandbox dispute only ever offered `provide-supporting-info`.
-- **Bundle size.** The main web chunk is about 3.2 MB (914 KB gzipped), mostly AG Grid Enterprise.
+- **Bundle size.** The entry script is 432 kB (146 kB gzipped). AG Grid Enterprise (929 kB / 267 kB gzipped) and the three.js hold scene (557 kB / 139 kB gzipped) load as separate on-demand chunks.
 - **Every other spec deviation and unconfirmed behavior** is listed in [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md).
 
 ---

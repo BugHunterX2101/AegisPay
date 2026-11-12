@@ -232,11 +232,12 @@ export function CommandGrid({ approve, ship, voidHold, cancel, evidence }: GridC
       },
       { headerName: 'State', field: 'state', cellRenderer: (p: CustomCellRendererProps<OrderRow>) => (isOrder(p) ? <StateChip state={p.data!.state} /> : null), width: 190 },
       { headerName: 'Hold', field: 'amountMinor', valueFormatter: (p) => (p.data ? money(p.data.amountMinor, p.data.currency) : ''), width: 90, type: 'rightAligned' },
-      { headerName: 'Supplier', field: 'domain', width: 180 },
+      // The deadline and its live countdown sit next to the money they guard, so they are on screen without scrolling.
+      { headerName: 'Deliver by', field: 'deliverBy', valueFormatter: (p) => formatDay(p.value as string | null), width: 125 },
+      { headerName: 'Timer', colId: 'timer', cellRenderer: SlaCell, width: 220, enableCellChangeFlash: false },
       // The value getter is what the CSV export writes; the renderer is what the screen shows.
       { headerName: 'Gate', colId: 'gate', valueGetter: (p) => (p.data?.gatePass == null ? '' : `${p.data.gatePass ? 'passed' : 'blocked'} ${p.data.decisionSha256 ?? ''}`.trim()), cellRenderer: GateCell, width: 150 },
-      { headerName: 'Deliver by', field: 'deliverBy', valueFormatter: (p) => formatDay(p.value as string | null), width: 140 },
-      { headerName: 'Timer', colId: 'timer', cellRenderer: SlaCell, width: 220, enableCellChangeFlash: false },
+      { headerName: 'Supplier', field: 'domain', width: 180 },
       { headerName: 'Tracking', colId: 'tracking', valueGetter: (p) => (p.data?.trackingNumber ? `${p.data.carrier ?? ''} ${p.data.trackingNumber}` : ''), width: 190 },
       { headerName: 'PayPal order', field: 'paypalOrderId', width: 190 },
       { headerName: 'Authorization', field: 'authorizationId', width: 170, hide: true },

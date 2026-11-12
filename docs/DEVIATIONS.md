@@ -159,7 +159,7 @@ None of these can be settled without a buyer-approved transaction and a buyer-fi
 - **Pinned section snaps one chapter at a time.** ScrollTrigger snap inertia is off, so a fast flick cannot skip a chapter. The ambient scroll triggers refresh after the pin so their range includes its spacer.
 - **Dialogs are portaled to the body.** A dialog opened from the translucent top bar would otherwise be sized and stacked by the bar's backdrop filter.
 - **Guideline audit.** The page was checked against the Vercel Web Interface Guidelines. Fixed: unlabeled mandate input, an accessible name that differed from its visible text, an unnamed table header, missing `name`/`autocomplete`/`spellCheck` on form fields, placeholder ellipses, `overscroll-behavior` on dialogs and the drawer, `translate="no"` on the brand name, and `dateTime` on feed times. Left as is on purpose: sentence-case buttons (the house voice), and the immediate "Cancel" on an order that has no hold yet.
-- **Known limit.** The main script chunk is about 3.2 MB (914 KB gzipped), mostly AG Grid Enterprise. It is not split further.
+- **Bundle split.** The entry script is 432 kB (146 kB gzipped). AG Grid Enterprise (929 kB, 267 kB gzipped) and the three.js scene (557 kB, 139 kB gzipped) are separate chunks loaded on demand, so neither blocks first paint.
 
 ## 5h. Review of the 2026-11-08 improvement list: what was built, what was not, and why
 

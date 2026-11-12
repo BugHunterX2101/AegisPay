@@ -26,6 +26,9 @@ function preloadFonts(): Plugin {
 // The built app is served as static files by the API (same origin, so the session cookie and CSRF need no CORS).
 export default defineConfig({
   plugins: [react(), preloadFonts()],
+  // The repo keeps one `.env` at its root. Vite only exposes `VITE_`-prefixed names to the bundle, so reading it from
+  // there brings in VITE_AG_GRID_LICENSE_KEY (no watermark on local builds) and nothing secret.
+  envDir: fileURLToPath(new URL('../..', import.meta.url)),
   build: {
     outDir: fileURLToPath(new URL('../api/public', import.meta.url)),
     emptyOutDir: true,
